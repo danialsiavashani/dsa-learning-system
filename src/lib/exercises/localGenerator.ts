@@ -5,12 +5,19 @@ import {
   type RecursiveFunctionId,
 } from "@/lib/domain/recursion";
 import {
+  traversal,
+  TRAVERSAL_ORDERS,
+  type TraversalOrder,
+  type Tree,
+  type TreeNode,
+} from "@/lib/domain/tree";
+import {
   runOperations,
   stackFromValues,
   stackValues,
   type StackOperation,
 } from "@/lib/domain/stack";
-import type { Difficulty, ExerciseKindId } from "@/lib/learning/schema";
+import { EXERCISE_SKILLS, type Difficulty, type ExerciseKindId } from "@/lib/learning/schema";
 import {
   arrayInsertionKind,
   type ArrayInsertionCandidate,
@@ -22,6 +29,12 @@ import {
   type RecursionAsk,
   type RecursionCandidate,
 } from "./kinds/recursionTrace";
+import {
+  TREE_EXERCISE_LIMITS,
+  treeDfsKind,
+  type TreeAsk,
+  type TreeCandidate,
+} from "./kinds/treeDfs";
 import {
   MAX_STACK_SIZE,
   STACK_ASKS,
@@ -298,6 +311,99 @@ function recursionCandidate(
   throw new Error(`Could not draw a valid ${difficulty} recursion exercise.`);
 }
 
+type TreeSkill = (typeof EXERCISE_SKILLS)["tree-dfs"][number];
+
+type TreeProfile = {
+  nodes: [number, number];
+  /** How far below the shallowest open slot a new node may go (0 = fill level by level). */
+  slack: number;
+  skills: TreeSkill[];
+  /** Orders used by questions that are not about one specific traversal. */
+  orders: TraversalOrder[];
+};
+
+const treeProfiles: Record<Difficulty, TreeProfile> = {
+  // Near-complete small trees; preorder only.
+  intro: {
+    nodes: [5, 6],
+    slack: 0,
+    skills: ["next-visit", "preorder", "leaves", "resumes", "path"],
+    orders: ["preorder"],
+  },
+  standard: {
+    nodes: [6, 7],
+    slack: 1,
+    skills: ["next-visit", "preorder", "inorder", "postorder", "resumes", "path", "leaves", "visit-position"],
+    orders: ["preorder", "inorder", "postorder"],
+  },
+  // Lopsided shapes allowed; inorder and postorder.
+  challenge: {
+    nodes: [6, 8],
+    slack: TREE_EXERCISE_LIMITS.maxLevels,
+    skills: ["inorder", "postorder", "next-visit", "visit-position", "resumes"],
+    orders: ["inorder", "postorder"],
+  },
+};
+
+/** Grows a random tree by repeatedly filling an open child slot. */
+function randomTree(random: Random, size: number, slack: number): Tree {
+  const values = distinctInts(random, size, 1, 30);
+  const nodes: TreeNode[] = [{ id: "t0", value: values[0], left: null, right: null }];
+  let open = [
+    { parent: 0, side: "left" as const, depth: 2 },
+    { parent: 0, side: "right" as const, depth: 2 },
+  ];
+  for (let k = 1; k < size; k++) {
+    const shallowest = Math.min(...open.map((slot) => slot.depth));
+    const candidates = open.filter((slot) => slot.depth <= shallowest + slack);
+    const slot = candidates[randomInt(random, 0, candidates.length - 1)];
+    const node: TreeNode = { id: `t${k}`, value: values[k], left: null, right: null };
+    nodes[slot.parent][slot.side] = node.id;
+    nodes.push(node);
+    open = open.filter((s) => s !== slot);
+    if (slot.depth < TREE_EXERCISE_LIMITS.maxLevels) {
+      open.push({ parent: k, side: "left", depth: slot.depth + 1 }, { parent: k, side: "right", depth: slot.depth + 1 });
+    }
+  }
+  return { root: "t0", nodes };
+}
+
+function treeCandidate(difficulty: Difficulty, random: Random, skills?: string[]): TreeCandidate {
+  const profile = treeProfiles[difficulty];
+  const pool = allowedAsks(profile.skills, EXERCISE_SKILLS["tree-dfs"], skills);
+  const skill = pool[randomInt(random, 0, pool.length - 1)];
+  const isOrder = (TRAVERSAL_ORDERS as readonly string[]).includes(skill);
+  const ask: TreeAsk = isOrder ? "traversal" : (skill as TreeAsk);
+  const order = isOrder ? (skill as TraversalOrder) : profile.orders[randomInt(random, 0, profile.orders.length - 1)];
+
+  const tree = randomTree(random, randomInt(random, ...profile.nodes), profile.slack);
+  const nonRoot = tree.nodes.slice(1).map((node) => node.id);
+  const extra =
+    ask === "resumes" || ask === "path"
+      ? { focus: nonRoot[randomInt(random, 0, nonRoot.length - 1)] }
+      : ask === "next-visit"
+        ? { visited: randomInt(random, 1, tree.nodes.length - 2) }
+        : ask === "visit-position"
+          ? { blank: (["visit", "left", "right"] as const)[randomInt(random, 0, 2)] }
+          : {};
+
+  // Like a model would, the generator states the traversals it expects.
+  return {
+    kind: "tree-dfs",
+    concept: "trees.dfs",
+    difficulty,
+    tree: { root: tree.root!, nodes: tree.nodes },
+    order,
+    ask,
+    ...extra,
+    expected: {
+      preorder: traversal(tree, "preorder"),
+      inorder: traversal(tree, "inorder"),
+      postorder: traversal(tree, "postorder"),
+    },
+  };
+}
+
 /** Each factory returns a candidate plus the fingerprint used to avoid repeats. */
 type LocalFactory = (
   difficulty: Difficulty,
@@ -321,6 +427,10 @@ const factories: Record<ExerciseKindId, LocalFactory> = {
   "recursion-trace": (difficulty, random, skills) => {
     const candidate = recursionCandidate(difficulty, random, skills);
     return { candidate, fingerprint: recursionTraceKind.fingerprint(candidate) };
+  },
+  "tree-dfs": (difficulty, random, skills) => {
+    const candidate = treeCandidate(difficulty, random, skills);
+    return { candidate, fingerprint: treeDfsKind.fingerprint(candidate) };
   },
 };
 

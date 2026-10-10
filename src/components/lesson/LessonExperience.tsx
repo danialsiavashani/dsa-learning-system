@@ -12,6 +12,11 @@ import LessonRunner from "./LessonRunner";
 
 type PracticeState = {
   exercise: AcceptedExercise | null;
+  /**
+   * The lesson step's request that started this practice run. Follow-up
+   * examples reuse it, so the whole run drills the skills that step taught.
+   */
+  origin: PracticeRequest | null;
   /** How many examples have been generated in this visit. */
   count: number;
   /** Fingerprints already shown, so each new example is different. */
@@ -37,6 +42,7 @@ export default function LessonExperience({
   const [exerciseSession, exerciseDispatch] = useReducer(sessionReducer, initialSession);
   const [practice, setPractice] = useState<PracticeState>({
     exercise: null,
+    origin: null,
     count: 0,
     seen: [],
     pending: false,
@@ -64,6 +70,7 @@ export default function LessonExperience({
     exerciseDispatch({ type: "reset" });
     setPractice((state) => ({
       exercise,
+      origin: request,
       count: state.count + 1,
       seen: [...state.seen, exercise.fingerprint],
       pending: false,
@@ -77,6 +84,9 @@ export default function LessonExperience({
     pending: practice.pending,
     error: practice.error,
   };
+  // Inside a generated example, "Another example" repeats the originating request.
+  const { origin } = practice;
+  const exerciseControls = origin ? { ...controls, onRequest: () => requestExample(origin) } : controls;
 
   if (practice.exercise) {
     const { exercise } = practice;
@@ -98,7 +108,7 @@ export default function LessonExperience({
             Back to {lesson.title}
           </button>
         }
-        practice={controls}
+        practice={exerciseControls}
       />
     );
   }

@@ -4,6 +4,7 @@ import { arrayInsertionKind } from "./kinds/arrayInsertion";
 import { arrayRemovalKind } from "./kinds/arrayRemoval";
 import { recursionTraceKind } from "./kinds/recursionTrace";
 import { stackOperationsKind } from "./kinds/stackOperations";
+import { treeDfsKind } from "./kinds/treeDfs";
 import type { ExerciseKind, ExerciseKindDefinition } from "./types";
 
 /** Erases a kind's candidate/truth types behind a uniform parse → verify → compile. */
@@ -39,4 +40,5 @@ export const exerciseKinds: Record<ExerciseKindId, ExerciseKind> = {
   "array-removal": erase(arrayRemovalKind),
   "stack-operations": erase(stackOperationsKind),
   "recursion-trace": erase(recursionTraceKind),
+  "tree-dfs": erase(treeDfsKind),
 };

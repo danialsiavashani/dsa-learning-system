@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_TREE_LIMITS, treeProblems } from "@/lib/domain/tree";
 
 /**
  * The learning-content schema. Handcrafted lessons and generated exercises
@@ -18,6 +19,7 @@ export const EXERCISE_KINDS = [
   "array-removal",
   "stack-operations",
   "recursion-trace",
+  "tree-dfs",
 ] as const;
 export const DIFFICULTIES = ["intro", "standard", "challenge"] as const;
 
@@ -39,6 +41,16 @@ export const EXERCISE_SKILLS = {
     "calls",
     "returns",
     "printed",
+  ],
+  "tree-dfs": [
+    "next-visit",
+    "preorder",
+    "inorder",
+    "postorder",
+    "resumes",
+    "path",
+    "leaves",
+    "visit-position",
   ],
 } as const satisfies Record<(typeof EXERCISE_KINDS)[number], readonly string[]>;
 
@@ -230,10 +242,90 @@ export const callStackVisualSchema = z
     }
   });
 
+/**
+ * A binary tree, optionally mid-traversal: `path` is the chain of active DFS
+ * calls from the root, `visited` the processed nodes in order, and `nullAt`
+ * a dfs(null) call on an empty child slot (the base case).
+ */
+export const treeVisualSchema = z
+  .object({
+    kind: z.literal("tree"),
+    root: idSchema.nullable(),
+    nodes: z
+      .array(
+        z.object({
+          id: idSchema,
+          value: z.number().int().min(-999).max(999),
+          left: idSchema.nullable(),
+          right: idSchema.nullable(),
+        }),
+      )
+      .max(DEFAULT_TREE_LIMITS.maxNodes),
+    path: z.array(idSchema).optional(),
+    visited: z.array(idSchema).optional(),
+    nullAt: z.object({ parent: idSchema, side: z.enum(["left", "right"]) }).optional(),
+    marks: z.record(idSchema, z.enum(VISUAL_MARKS)).optional(),
+    /** Short labels under nodes, e.g. "root", "leaf". */
+    tags: z.record(idSchema, z.string().trim().min(1).max(14)).optional(),
+    caption: shortText.optional(),
+  })
+  .superRefine((visual, ctx) => {
+    for (const problem of treeProblems({ root: visual.root, nodes: visual.nodes })) {
+      ctx.addIssue({ code: "custom", path: ["nodes"], message: problem });
+    }
+    const byId = new Map(visual.nodes.map((node) => [node.id, node]));
+    const known = (field: string, ids: string[]) => {
+      for (const id of ids) {
+        if (!byId.has(id)) {
+          ctx.addIssue({ code: "custom", path: [field], message: `${field} refers to unknown node "${id}".` });
+        }
+      }
+    };
+    known("visited", visual.visited ?? []);
+    known("marks", Object.keys(visual.marks ?? {}));
+    known("tags", Object.keys(visual.tags ?? {}));
+    for (const id of duplicates(visual.visited ?? [])) {
+      ctx.addIssue({ code: "custom", path: ["visited"], message: `Node "${id}" is visited twice.` });
+    }
+
+    const path = visual.path ?? [];
+    if (path.length > 0 && path[0] !== visual.root) {
+      ctx.addIssue({ code: "custom", path: ["path"], message: "The call path must start at the root." });
+    }
+    path.slice(1).forEach((id, i) => {
+      const parent = byId.get(path[i]);
+      if (!parent || (parent.left !== id && parent.right !== id)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["path", i + 1],
+          message: `"${id}" is not a child of "${path[i]}": a call path follows edges.`,
+        });
+      }
+    });
+    if (visual.nullAt) {
+      const parent = byId.get(visual.nullAt.parent);
+      if (!parent || parent[visual.nullAt.side] !== null) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["nullAt"],
+          message: `dfs(null) needs an empty ${visual.nullAt.side} child under "${visual.nullAt.parent}".`,
+        });
+      }
+      if (path[path.length - 1] !== visual.nullAt.parent) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["nullAt"],
+          message: "dfs(null) is called by the frame at the top of the path.",
+        });
+      }
+    }
+  });
+
 export const visualStateSchema = z.discriminatedUnion("kind", [
   arrayVisualSchema,
   stackVisualSchema,
   callStackVisualSchema,
+  treeVisualSchema,
 ]);
 
 // ---------------------------------------------------------------------------
@@ -484,6 +576,7 @@ export type VisualMark = (typeof VISUAL_MARKS)[number];
 export type ArrayVisual = z.infer<typeof arrayVisualSchema>;
 export type StackVisual = z.infer<typeof stackVisualSchema>;
 export type CallStackVisual = z.infer<typeof callStackVisualSchema>;
+export type TreeVisual = z.infer<typeof treeVisualSchema>;
 export type VisualState = z.infer<typeof visualStateSchema>;
 export type CodeView = z.infer<typeof codeViewSchema>;
 export type ChoiceQuestion = z.infer<typeof choiceQuestionSchema>;

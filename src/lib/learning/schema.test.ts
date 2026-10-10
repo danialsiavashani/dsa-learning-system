@@ -313,3 +313,42 @@ describe("lesson sources and practice skills", () => {
     expect(problems.join()).toContain('"printed" is not a skill of stack-operations');
   });
 });
+
+describe("tree visual validation", () => {
+  const nodes = [
+    { id: "a", value: 7, left: "b", right: "c" },
+    { id: "b", value: 3, left: null, right: null },
+    { id: "c", value: 9, left: null, right: null },
+  ];
+  const treeStep = (visual: Record<string, unknown>): LessonStepInput =>
+    ({ id: "t", mode: "show", title: "Tree", visual: { kind: "tree", root: "a", nodes, ...visual } }) as LessonStepInput;
+
+  it("accepts a valid mid-traversal state", () => {
+    expect(
+      problemsOf(lessonWith(treeStep({ path: ["a", "b"], visited: ["a", "b"], nullAt: { parent: "b", side: "left" } }))),
+    ).toEqual([]);
+  });
+
+  it("rejects a path that does not follow edges or start at the root", () => {
+    expect(problemsOf(lessonWith(treeStep({ path: ["a", "b", "c"] }))).join()).toContain("follows edges");
+    expect(problemsOf(lessonWith(treeStep({ path: ["b"] }))).join()).toContain("start at the root");
+  });
+
+  it("rejects a null call on an occupied slot or away from the current call", () => {
+    expect(problemsOf(lessonWith(treeStep({ path: ["a"], nullAt: { parent: "a", side: "left" } }))).join()).toContain(
+      "empty left child",
+    );
+    expect(problemsOf(lessonWith(treeStep({ path: ["a"], nullAt: { parent: "b", side: "left" } }))).join()).toContain(
+      "top of the path",
+    );
+  });
+
+  it("rejects unknown or repeated visits and a broken structure", () => {
+    const problems = problemsOf(lessonWith(treeStep({ visited: ["a", "a", "zz"] }))).join();
+    expect(problems).toContain('visited twice');
+    expect(problems).toContain('unknown node "zz"');
+    expect(
+      problemsOf(lessonWith({ id: "t", mode: "show", title: "T", visual: { kind: "tree", root: "a", nodes: [{ id: "a", value: 1, left: "a", right: null }] } } as LessonStepInput)),
+    ).not.toEqual([]);
+  });
+});

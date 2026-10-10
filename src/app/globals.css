@@ -44,8 +44,8 @@ body {
  */
 
 .viz-motion {
-  transition-property: left, top, bottom, scale, opacity, background-color,
-    border-color, color;
+  transition-property: left, top, bottom, transform, scale, opacity,
+    background-color, border-color, color;
   transition-duration: 550ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
