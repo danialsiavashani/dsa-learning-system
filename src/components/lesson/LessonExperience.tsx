@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useState } from "react";
+import { useReducer, useState, type ReactNode } from "react";
 import {
   exerciseGenerator,
   produceExercise,
@@ -25,7 +25,14 @@ type PracticeState = {
  * Both are rendered by the same LessonRunner; the lesson's progress is kept
  * while the learner practices.
  */
-export default function LessonExperience({ lesson }: { lesson: Lesson }) {
+export default function LessonExperience({
+  lesson,
+  nav,
+}: {
+  lesson: Lesson;
+  /** Concept navigation, shown while on the lesson itself. */
+  nav?: ReactNode;
+}) {
   const [lessonSession, lessonDispatch] = useReducer(sessionReducer, initialSession);
   const [exerciseSession, exerciseDispatch] = useReducer(sessionReducer, initialSession);
   const [practice, setPractice] = useState<PracticeState>({
@@ -101,7 +108,8 @@ export default function LessonExperience({ lesson }: { lesson: Lesson }) {
       lesson={lesson}
       session={lessonSession}
       dispatch={lessonDispatch}
-      eyebrow="Interactive DSA Tutor"
+      eyebrow="Java DSA Tutor"
+      headerAction={nav}
       practice={controls}
     />
   );

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { arraysLesson } from "@/curriculum/lessons/arrays";
+import { concepts } from "@/curriculum";
 import { createLocalGenerator } from "@/lib/exercises/localGenerator";
 import { produceExercise } from "@/lib/exercises/pipeline";
 import { seededRandom } from "@/lib/exercises/random";
-import type { Lesson } from "./schema";
+import { DIFFICULTIES, EXERCISE_KINDS, type Lesson } from "./schema";
 import { validateLesson } from "./validate";
 
 /** Constructs that would mean JavaScript/TypeScript leaked into teaching code. */
@@ -30,20 +30,19 @@ function expectJava(lesson: Lesson) {
 }
 
 describe("learner-facing code is Java", () => {
-  it("in the canonical Arrays lesson", () => {
-    expect(codeOf(arraysLesson).length).toBeGreaterThan(0);
-    expectJava(arraysLesson);
+  it.each(concepts)("in the canonical $label lesson", ({ lesson }) => {
+    expect(codeOf(lesson).length).toBeGreaterThan(0);
+    expectJava(lesson);
   });
 
-  it("in generated examples", async () => {
+  it.each(EXERCISE_KINDS)("in generated %s examples", async (kind) => {
     const generator = createLocalGenerator(seededRandom(99));
-    for (let i = 0; i < 100; i++) {
-      const result = await produceExercise(generator, {
-        kind: "array-insertion",
-        difficulty: "challenge",
-      });
-      if (!result.ok) throw new Error(result.problems.join("\n"));
-      expectJava(result.value.lesson);
+    for (const difficulty of DIFFICULTIES) {
+      for (let i = 0; i < 40; i++) {
+        const result = await produceExercise(generator, { kind, difficulty });
+        if (!result.ok) throw new Error(result.problems.join("\n"));
+        expectJava(result.value.lesson);
+      }
     }
   });
 

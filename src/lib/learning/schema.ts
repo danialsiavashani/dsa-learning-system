@@ -13,7 +13,7 @@ import { z } from "zod";
 // ---------------------------------------------------------------------------
 // Shared vocabulary
 
-export const EXERCISE_KINDS = ["array-insertion"] as const;
+export const EXERCISE_KINDS = ["array-insertion", "stack-operations"] as const;
 export const DIFFICULTIES = ["intro", "standard", "challenge"] as const;
 
 export const exerciseKindSchema = z.enum(EXERCISE_KINDS);
@@ -86,8 +86,61 @@ export const arrayVisualSchema = z
     });
   });
 
+const stackValueSchema = z.union([
+  z.number().finite(),
+  z.string().trim().min(1).max(10),
+]);
+
+/**
+ * A stack, bottom → top. `held` is a value just outside the top of the stack,
+ * either waiting to be pushed or just popped; because it keeps its ID, it
+ * visibly travels into or out of the stack between states.
+ */
+export const stackVisualSchema = z
+  .object({
+    kind: z.literal("stack"),
+    items: z.array(z.object({ id: idSchema, value: stackValueSchema })).max(8),
+    marks: z.record(idSchema, z.enum(VISUAL_MARKS)).optional(),
+    held: z
+      .object({ id: idSchema, value: stackValueSchema, label: shortText })
+      .optional(),
+    /** A note beside the top, e.g. "peek() → 5". */
+    callout: shortText.optional(),
+    caption: shortText.optional(),
+  })
+  .superRefine((visual, ctx) => {
+    const ids = [
+      ...visual.items.map((item) => item.id),
+      ...(visual.held ? [visual.held.id] : []),
+    ];
+    for (const id of duplicates(ids)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["items"],
+        message: `Duplicate item id "${id}".`,
+      });
+    }
+    for (const id of Object.keys(visual.marks ?? {})) {
+      if (!ids.includes(id)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["marks", id],
+          message: `Mark refers to unknown item "${id}".`,
+        });
+      }
+    }
+    if (visual.callout && visual.items.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["callout"],
+        message: "A callout points at the top, so the stack cannot be empty.",
+      });
+    }
+  });
+
 export const visualStateSchema = z.discriminatedUnion("kind", [
   arrayVisualSchema,
+  stackVisualSchema,
 ]);
 
 // ---------------------------------------------------------------------------
@@ -234,6 +287,7 @@ const explainStepSchema = z.object({
   ...stepBase,
   mode: z.literal("explain"),
   question: choiceQuestionSchema,
+  reveal: revealSchema.optional(),
 });
 
 const completeStepSchema = z
@@ -308,6 +362,7 @@ export type ExerciseKindId = z.infer<typeof exerciseKindSchema>;
 export type Difficulty = z.infer<typeof difficultySchema>;
 export type VisualMark = (typeof VISUAL_MARKS)[number];
 export type ArrayVisual = z.infer<typeof arrayVisualSchema>;
+export type StackVisual = z.infer<typeof stackVisualSchema>;
 export type VisualState = z.infer<typeof visualStateSchema>;
 export type CodeView = z.infer<typeof codeViewSchema>;
 export type ChoiceQuestion = z.infer<typeof choiceQuestionSchema>;

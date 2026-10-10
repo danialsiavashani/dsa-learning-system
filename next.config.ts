@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // The first concept in the curriculum is the landing page.
+  redirects() {
+    return [{ source: "/", destination: "/arrays", permanent: false }];
+  },
   turbopack: {
     rules: {
       "*.css": {

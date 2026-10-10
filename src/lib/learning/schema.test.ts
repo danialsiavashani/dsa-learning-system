@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { concepts } from "@/curriculum";
 import { arraysLesson } from "@/curriculum/lessons/arrays";
 import type { LessonInput, LessonStepInput } from "./schema";
 import { defineLesson, LessonValidationError, validateLesson } from "./validate";
@@ -21,15 +22,76 @@ function problemsOf(input: unknown): string[] {
 }
 
 describe("canonical lessons", () => {
-  it("the Arrays lesson passes validation", () => {
-    expect(validateLesson(arraysLesson).ok).toBe(true);
+  it.each(concepts)("the $label lesson passes validation", ({ lesson }) => {
+    expect(validateLesson(lesson).ok).toBe(true);
   });
 
-  it("the Arrays lesson covers every learning mode", () => {
-    const modes = new Set(arraysLesson.steps.map((step) => step.mode));
+  it.each(concepts)("the $label lesson covers every learning mode", ({ lesson }) => {
+    const modes = new Set(lesson.steps.map((step) => step.mode));
     expect([...modes].sort()).toEqual(
       ["complete", "explain", "predict", "show", "solve", "trace"].sort(),
     );
+  });
+
+  it.each(concepts)("the $label lesson offers generated practice", ({ lesson }) => {
+    expect(lesson.steps.some((step) => step.practice)).toBe(true);
+  });
+
+  it("concept slugs are unique", () => {
+    expect(new Set(concepts.map((c) => c.slug)).size).toBe(concepts.length);
+  });
+
+  it("the Arrays lesson is still first", () => {
+    expect(concepts[0].lesson).toBe(arraysLesson);
+  });
+});
+
+describe("stack visual validation", () => {
+  const stackStep = (visual: Record<string, unknown>): LessonStepInput =>
+    ({ id: "s", mode: "show", title: "Stack", visual: { kind: "stack", ...visual } }) as LessonStepInput;
+
+  it("accepts numbers, short labels and a held value", () => {
+    expect(
+      problemsOf(
+        lessonWith(
+          stackStep({
+            items: [
+              { id: "a", value: 1 },
+              { id: "b", value: "main()" },
+            ],
+            held: { id: "c", value: 3, label: "push(3)" },
+            marks: { c: "focus" },
+            callout: "peek() → main()",
+          }),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("rejects a held value that reuses an item id", () => {
+    const problems = problemsOf(
+      lessonWith(
+        stackStep({
+          items: [{ id: "a", value: 1 }],
+          held: { id: "a", value: 2, label: "pop() → 2" },
+        }),
+      ),
+    );
+    expect(problems.join()).toContain('Duplicate item id "a"');
+  });
+
+  it("rejects a callout on an empty stack and marks on unknown items", () => {
+    const problems = problemsOf(
+      lessonWith(stackStep({ items: [], callout: "peek() → ?", marks: { ghost: "new" } })),
+    );
+    expect(problems.join()).toContain("cannot be empty");
+    expect(problems.join()).toContain('unknown item "ghost"');
+  });
+
+  it("rejects labels too long to fit a stack cell", () => {
+    expect(
+      problemsOf(lessonWith(stackStep({ items: [{ id: "a", value: "averyverylonglabel" }] }))),
+    ).not.toEqual([]);
   });
 });
 

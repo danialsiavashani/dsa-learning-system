@@ -1,6 +1,7 @@
 import type { ExerciseKindId } from "@/lib/learning/schema";
 import { describeZodError } from "@/lib/learning/validate";
 import { arrayInsertionKind } from "./kinds/arrayInsertion";
+import { stackOperationsKind } from "./kinds/stackOperations";
 import type { ExerciseKind, ExerciseKindDefinition } from "./types";
 
 /** Erases a kind's candidate/truth types behind a uniform parse → verify → compile. */
@@ -32,4 +33,5 @@ function erase<Candidate, Truth>(
 /** Adding an exercise format = adding its definition here. */
 export const exerciseKinds: Record<ExerciseKindId, ExerciseKind> = {
   "array-insertion": erase(arrayInsertionKind),
+  "stack-operations": erase(stackOperationsKind),
 };

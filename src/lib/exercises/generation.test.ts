@@ -122,3 +122,58 @@ describe("produceExercise", () => {
     if (!result.ok) expect(result.problems.join()).toContain("network down");
   });
 });
+
+describe("local stack generator", () => {
+  it.each(DIFFICULTIES)("always produces stack candidates that pass the truth gate (%s)", async (difficulty) => {
+    const generator = createLocalGenerator(seededRandom(17));
+    const request = { kind: "stack-operations" as const, difficulty };
+
+    for (let i = 0; i < 200; i++) {
+      const raw = await generator.generate(request, context);
+      const result = acceptCandidate(raw, request);
+      if (!result.ok) throw new Error(`${JSON.stringify(raw)}\n${result.problems.join("\n")}`);
+    }
+  });
+
+  it("varies the question, the sequence and the answer format", async () => {
+    const generator = createLocalGenerator(seededRandom(23));
+    const asks = new Set<string>();
+    const modes = new Set<string>();
+    const fingerprints = new Set<string>();
+    const seen: string[] = [];
+
+    for (let i = 0; i < 60; i++) {
+      const result = await produceExercise(generator, {
+        kind: "stack-operations",
+        difficulty: "standard",
+        avoid: seen,
+      });
+      if (!result.ok) throw new Error(result.problems.join("\n"));
+      const ask = result.value.fingerprint.split("|").at(-1) ?? "";
+      asks.add(ask);
+      modes.add(result.value.lesson.steps[0].mode);
+      fingerprints.add(result.value.fingerprint);
+      seen.push(result.value.fingerprint);
+    }
+
+    expect(asks).toEqual(new Set(["top", "popped", "peek", "final", "operation"]));
+    expect(modes).toEqual(new Set(["predict", "solve", "complete"]));
+    expect(fingerprints.size).toBe(60);
+  });
+
+  it("keeps intro examples to one operation on a small stack, asking about that operation", async () => {
+    const generator = createLocalGenerator(seededRandom(29));
+    for (let i = 0; i < 50; i++) {
+      const raw = (await generator.generate(
+        { kind: "stack-operations", difficulty: "intro" },
+        context,
+      )) as { initial: number[]; operations: { type: string }[]; ask: string };
+      expect(raw.operations).toHaveLength(1);
+      expect(raw.initial.length).toBeGreaterThanOrEqual(3);
+      expect(raw.initial.length).toBeLessThanOrEqual(4);
+      // Each intro question matches its single operation.
+      const expectedAsk = { push: "top", pop: "popped", peek: "peek" }[raw.operations[0].type];
+      expect(raw.ask).toBe(expectedAsk);
+    }
+  });
+});

@@ -1,9 +1,21 @@
 import { insertAt, itemsFromValues, valuesOf } from "@/lib/domain/array";
+import {
+  runOperations,
+  stackFromValues,
+  stackValues,
+  type StackOperation,
+} from "@/lib/domain/stack";
 import type { Difficulty, ExerciseKindId } from "@/lib/learning/schema";
 import {
   arrayInsertionKind,
   type ArrayInsertionCandidate,
 } from "./kinds/arrayInsertion";
+import {
+  MAX_STACK_SIZE,
+  stackOperationsKind,
+  type StackAsk,
+  type StackCandidate,
+} from "./kinds/stackOperations";
 import { distinctInts, randomInt, type Random } from "./random";
 import type { ExerciseGenerator, ExerciseRequest } from "./types";
 
@@ -69,6 +81,89 @@ function arrayInsertionCandidate(
   };
 }
 
+type StackProfile = {
+  initial: [number, number];
+  operations: [number, number];
+  asks: StackAsk[];
+};
+
+const stackProfiles: Record<Difficulty, StackProfile> = {
+  // One operation on a small stack: push, pop or peek, then predict.
+  intro: { initial: [3, 4], operations: [1, 1], asks: ["top", "popped", "peek"] },
+  // A short sequence, or "which line did this?".
+  standard: {
+    initial: [1, 4],
+    operations: [2, 3],
+    asks: ["top", "popped", "peek", "final", "operation"],
+  },
+  // Longer sequences, possibly from empty; typed answers.
+  challenge: { initial: [0, 3], operations: [3, 5], asks: ["final", "popped", "top"] },
+};
+
+function stackCandidate(difficulty: Difficulty, random: Random): StackCandidate {
+  const profile = stackProfiles[difficulty];
+  // Rejection sampling: draw sequences until one supports the chosen question.
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const ask = profile.asks[randomInt(random, 0, profile.asks.length - 1)];
+    const length = randomInt(random, ...profile.initial);
+    const count = ask === "operation" ? 1 : randomInt(random, ...profile.operations);
+    const values = distinctInts(random, length + count, 1, 30);
+    const initial = values.slice(0, length);
+    let fresh = values.slice(length);
+
+    const operations: StackOperation[] = [];
+    let size = initial.length;
+    for (let i = 0; i < count; i++) {
+      const lastOp = i === count - 1;
+      const options: StackOperation["type"][] = [];
+      if (size < MAX_STACK_SIZE) options.push("push");
+      if (size > 0) options.push("pop", "pop");
+      if (size > 0 && ask !== "operation") options.push("peek");
+      // Steer the final operation toward the question being asked.
+      const type =
+        lastOp && ask === "peek" && size > 0
+          ? "peek"
+          : options[randomInt(random, 0, options.length - 1)];
+      if (type === "push") {
+        operations.push({ type, value: fresh[0] });
+        fresh = fresh.slice(1);
+        size++;
+      } else {
+        operations.push({ type });
+        if (type === "pop") size--;
+      }
+    }
+
+    const run = runOperations(stackFromValues(initial), operations);
+    const final = stackValues(run.final);
+    const valid =
+      run.threwAt === undefined &&
+      (ask !== "popped" || run.popped.length > 0) &&
+      (ask !== "peek" || operations[operations.length - 1].type === "peek") &&
+      ((ask !== "top" && ask !== "final") || final.length > 0) &&
+      (ask !== "operation" || operations[0].type !== "peek") &&
+      // "What is on top after one peek()/pop()?" is a weak question; ask it about a push.
+      (ask !== "top" || operations.length > 1 || operations[0].type === "push") &&
+      initial.length + operations.filter((op) => op.type === "push").length >= 2;
+    if (!valid) continue;
+
+    return {
+      kind: "stack-operations",
+      concept: "stacks.operations",
+      difficulty,
+      initial,
+      operations,
+      ask,
+      expected: {
+        final,
+        popped: run.popped,
+        peeked: run.peeked.filter((value): value is number => value !== null),
+      },
+    };
+  }
+  throw new Error(`Could not draw a valid ${difficulty} stack sequence.`);
+}
+
 /** Each factory returns a candidate plus the fingerprint used to avoid repeats. */
 type LocalFactory = (
   difficulty: Difficulty,
@@ -79,6 +174,10 @@ const factories: Record<ExerciseKindId, LocalFactory> = {
   "array-insertion": (difficulty, random) => {
     const candidate = arrayInsertionCandidate(difficulty, random);
     return { candidate, fingerprint: arrayInsertionKind.fingerprint(candidate) };
+  },
+  "stack-operations": (difficulty, random) => {
+    const candidate = stackCandidate(difficulty, random);
+    return { candidate, fingerprint: stackOperationsKind.fingerprint(candidate) };
   },
 };
 

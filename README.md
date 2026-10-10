@@ -36,6 +36,8 @@ components/visualizers/registry               one visualizer per visual-state ki
 
 ### Adding things
 
-- **A visualizer** (stack, tree, …): add a variant to `visualStateSchema`, then a component in `components/visualizers/registry.ts`.
+- **A concept**: write its lesson in `src/curriculum/lessons/` and add it to `src/curriculum/index.ts`. It gets a route (`/arrays`, `/stack`, …) and appears in the concept switcher.
+
+- **A visualizer** (queue, tree, …): add a variant to `visualStateSchema`, then a component in `components/visualizers/registry.ts`.
 - **An exercise kind**: add its id to `EXERCISE_KINDS`, write a definition (schema, `verify`, `compile`) in `lib/exercises/kinds/`, and register it in `lib/exercises/registry.ts`.
 - **An LLM provider**: implement `ExerciseGenerator` (its output is treated as `unknown`) and swap it in at `lib/exercises/index.ts`. Rejection reasons are passed back on retries through `GenerationContext.previousProblems`.
