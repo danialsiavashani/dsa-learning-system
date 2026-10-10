@@ -13,8 +13,34 @@ import { z } from "zod";
 // ---------------------------------------------------------------------------
 // Shared vocabulary
 
-export const EXERCISE_KINDS = ["array-insertion", "stack-operations", "recursion-trace"] as const;
+export const EXERCISE_KINDS = [
+  "array-insertion",
+  "array-removal",
+  "stack-operations",
+  "recursion-trace",
+] as const;
 export const DIFFICULTIES = ["intro", "standard", "challenge"] as const;
+
+/**
+ * The skills each exercise kind can drill. A lesson step's practice request
+ * may name a subset, so "Another example" reinforces exactly what that step
+ * just taught; the pipeline rejects generated exercises outside the subset.
+ */
+export const EXERCISE_SKILLS = {
+  "array-insertion": ["insert"],
+  "array-removal": ["remove"],
+  "stack-operations": ["top", "popped", "peek", "final", "operation"],
+  "recursion-trace": [
+    "next-call",
+    "base-return",
+    "return-value",
+    "resumes",
+    "final",
+    "calls",
+    "returns",
+    "printed",
+  ],
+} as const satisfies Record<(typeof EXERCISE_KINDS)[number], readonly string[]>;
 
 export const exerciseKindSchema = z.enum(EXERCISE_KINDS);
 export const difficultySchema = z.enum(DIFFICULTIES);
@@ -311,10 +337,25 @@ export const questionSchema = z.discriminatedUnion("kind", [
 // Steps. `mode` is the discriminator; each mode only carries what it needs.
 
 /** Lets a step offer freshly generated examples of the same idea. */
-export const practiceRequestSchema = z.object({
-  kind: exerciseKindSchema,
-  difficulty: difficultySchema,
-});
+export const practiceRequestSchema = z
+  .object({
+    kind: exerciseKindSchema,
+    difficulty: difficultySchema,
+    /** Restrict generated practice to these skills of the kind. */
+    skills: z.array(z.string()).min(1).max(8).optional(),
+  })
+  .superRefine((request, ctx) => {
+    const known: readonly string[] = EXERCISE_SKILLS[request.kind];
+    for (const skill of request.skills ?? []) {
+      if (!known.includes(skill)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["skills"],
+          message: `"${skill}" is not a skill of ${request.kind} (${known.join(", ")}).`,
+        });
+      }
+    }
+  });
 
 /** What the stage shows once a question has been answered. */
 export const revealSchema = z.object({
@@ -414,10 +455,22 @@ export const lessonStepsSchema = z
     }
   });
 
+/**
+ * Where a canonical lesson's explanations come from. Canonical content is
+ * grounded in vetted sources (OpenDSA for concepts and pedagogy, Princeton
+ * algs4 and the Java API docs for implementation), paraphrased, never copied.
+ */
+export const lessonSourceSchema = z.object({
+  title: shortText,
+  url: z.string().url(),
+  role: z.enum(["concept", "implementation", "pedagogy"]),
+});
+
 export const lessonSchema = z.object({
   id: idSchema,
   title: shortText,
   subtitle: shortText.optional(),
+  sources: z.array(lessonSourceSchema).max(12).optional(),
   steps: lessonStepsSchema,
 });
 
@@ -437,6 +490,7 @@ export type ChoiceQuestion = z.infer<typeof choiceQuestionSchema>;
 export type NumberListQuestion = z.infer<typeof numberListQuestionSchema>;
 export type Question = z.infer<typeof questionSchema>;
 export type PracticeRequest = z.infer<typeof practiceRequestSchema>;
+export type LessonSource = z.infer<typeof lessonSourceSchema>;
 export type Reveal = z.infer<typeof revealSchema>;
 export type LessonStep = z.infer<typeof lessonStepSchema>;
 export type StepMode = LessonStep["mode"];

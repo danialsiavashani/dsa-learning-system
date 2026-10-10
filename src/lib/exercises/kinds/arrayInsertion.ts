@@ -276,6 +276,7 @@ export const arrayInsertionKind: ExerciseKindDefinition<
   label: "Array insertion",
   schema: arrayInsertionCandidateSchema,
   fingerprint: fingerprintOf,
+  skill: () => "insert",
   verify,
   compile,
 };

@@ -25,3 +25,19 @@ export const insertAtCode = {
     write: 6,
   },
 } as const;
+
+export const removeAtCode = {
+  source: [
+    "void removeAt(int[] arr, int size, int index) {",
+    "    // Walk from the front so no value is overwritten.",
+    "    for (int i = index; i < size - 1; i++) {",
+    "        arr[i] = arr[i + 1];",
+    "    }",
+    "}",
+  ].join("\n"),
+  lines: {
+    signature: 1,
+    loop: [3, 4, 5],
+    shift: 4,
+  },
+} as const;

@@ -37,6 +37,17 @@ describe("canonical lessons", () => {
     expect(lesson.steps.some((step) => step.practice)).toBe(true);
   });
 
+  it.each(concepts)("the $label lesson cites OpenDSA and algs4", ({ lesson }) => {
+    const urls = (lesson.sources ?? []).map((source) => source.url);
+    expect(urls.some((url) => url.includes("opendsa"))).toBe(true);
+    expect(urls.some((url) => url.includes("algs4.cs.princeton.edu"))).toBe(true);
+  });
+
+  it.each(concepts)("the $label lesson keeps asking the learner, not just once per mode", ({ lesson }) => {
+    const questions = lesson.steps.filter((step) => "question" in step);
+    expect(questions.length).toBeGreaterThanOrEqual(10);
+  });
+
   it("concept slugs are unique", () => {
     expect(new Set(concepts.map((c) => c.slug)).size).toBe(concepts.length);
   });
@@ -271,3 +282,34 @@ describe("call stack visual validation", () => {
   });
 });
 
+
+describe("lesson sources and practice skills", () => {
+  it("accepts well-formed source metadata", () => {
+    expect(
+      problemsOf({
+        ...lessonWith({ id: "s", mode: "show", title: "Hi" }),
+        sources: [{ title: "OpenDSA", url: "https://opendsa.org/x", role: "concept" }],
+      }),
+    ).toEqual([]);
+  });
+
+  it("rejects malformed source metadata", () => {
+    const problems = problemsOf({
+      ...lessonWith({ id: "s", mode: "show", title: "Hi" }),
+      sources: [{ title: "Somewhere", url: "not a url", role: "vibes" }],
+    });
+    expect(problems.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("rejects a practice skill the exercise kind does not have", () => {
+    const problems = problemsOf(
+      lessonWith({
+        id: "s",
+        mode: "show",
+        title: "Hi",
+        practice: { kind: "stack-operations", difficulty: "intro", skills: ["printed"] },
+      }),
+    );
+    expect(problems.join()).toContain('"printed" is not a skill of stack-operations');
+  });
+});

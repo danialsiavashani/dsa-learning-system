@@ -45,6 +45,11 @@ export function acceptCandidate(
         `Asked for difficulty "${request.difficulty}" but got "${exercise.difficulty}".`,
       );
     }
+    if (request.skills && !request.skills.includes(exercise.skill)) {
+      mismatches.push(
+        `Asked to practise ${request.skills.join(" or ")} but got "${exercise.skill}".`,
+      );
+    }
     if (request.avoid?.includes(exercise.fingerprint)) {
       mismatches.push("This example was already shown; a new one is required.");
     }
@@ -68,6 +73,7 @@ export function acceptCandidate(
     ok: true,
     value: {
       fingerprint: exercise.fingerprint,
+      skill: exercise.skill,
       kind: kind.id,
       concept: kind.concept,
       label: kind.label,

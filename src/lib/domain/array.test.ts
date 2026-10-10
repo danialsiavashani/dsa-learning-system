@@ -4,6 +4,8 @@ import {
   insertAt,
   itemsFromValues,
   readAt,
+  removeAt,
+  updateAt,
   valuesOf,
 } from "./array";
 
@@ -81,5 +83,48 @@ describe("readAt", () => {
   it("rejects indices outside the array", () => {
     expect(() => readAt(items, 5)).toThrow(ArrayOperationError);
     expect(() => readAt(items, -1)).toThrow(ArrayOperationError);
+  });
+});
+
+describe("updateAt", () => {
+  it("replaces one value in place, keeping its id and every other item", () => {
+    const after = updateAt(items, 1, 5);
+    expect(valuesOf(after)).toEqual([4, 5, 2, 9, 3]);
+    expect(after[1].id).toBe("i1");
+    expect(after[0]).toBe(items[0]);
+    expect(valuesOf(items)).toEqual([4, 8, 2, 9, 3]);
+  });
+
+  it("rejects an index outside the array", () => {
+    expect(() => updateAt(items, 5, 1)).toThrow(ArrayOperationError);
+  });
+});
+
+describe("removeAt", () => {
+  it("removes from the middle and shifts every later item left", () => {
+    const result = removeAt(items, 1);
+    expect(result.removed).toEqual({ id: "i1", value: 8 });
+    expect(valuesOf(result.after)).toEqual([4, 2, 9, 3]);
+    expect(valuesOf(result.shifted)).toEqual([2, 9, 3]);
+    expect(valuesOf(result.unchanged)).toEqual([4]);
+  });
+
+  it("leaves a gap in the removed slot before closing it", () => {
+    const result = removeAt(items, 1);
+    expect(valuesOf(result.opened)).toEqual([4, null, 2, 9, 3]);
+    expect(result.opened[1].id).toBe("i1");
+  });
+
+  it("keeps the identity of the shifted items", () => {
+    expect(removeAt(items, 1).after[1]).toBe(items[2]);
+  });
+
+  it("shifts nothing when removing the last item, and everything else when removing the first", () => {
+    expect(removeAt(items, 4).shifted).toEqual([]);
+    expect(removeAt(items, 0).shifted).toHaveLength(4);
+  });
+
+  it.each([-1, 5, 0.5])("rejects index %s", (index) => {
+    expect(() => removeAt(items, index)).toThrow(ArrayOperationError);
   });
 });

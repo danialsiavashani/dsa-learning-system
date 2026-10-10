@@ -9,9 +9,11 @@ import { listValues } from "@/lib/learning/format";
 import { defineLesson } from "@/lib/learning/validate";
 
 /**
- * The canonical Stack lesson. Plain data: every state is produced by the
- * stack domain functions, so item IDs carry through push and pop and the
- * visualizer can animate values in and out of the top.
+ * The canonical Stack lesson. Sequencing and claims follow OpenDSA's stack
+ * module (restricted access at one end, LIFO, choosing which end of an array
+ * is the top) and its queue module for the FIFO contrast, with Java checked
+ * against algs4 section 1.3 / ResizingArrayStack and the ArrayDeque docs.
+ * Every state is produced by the stack domain functions.
  */
 
 const java = (lines: string[]) => ({ source: lines.join("\n"), language: "java" as const });
@@ -28,11 +30,28 @@ const usageCode = java([
   "int next = stack.pop();",
 ]);
 
+const arrayStackCode = java([
+  "class IntStack {",
+  "    private int[] a = new int[8];",
+  "    private int n = 0;",
+  "    void push(int x) { a[n++] = x; }",
+  "    int pop()        { return a[--n]; }",
+  "    int peek()       { return a[n - 1]; }",
+  "}",
+]);
+
 const emptyCode = java([
   "while (!stack.isEmpty()) {",
   "    stack.pop();",
   "}",
   "Integer top = stack.peek();",
+]);
+
+const drainCode = java([
+  "while (!stack.isEmpty()) {",
+  "    int top = stack.pop();",
+  "    System.out.println(top);",
+  "}",
 ]);
 
 const undoCode = java([
@@ -54,6 +73,16 @@ const traceCode = java([
   "stack.pop();",
 ]);
 
+const reverseCode = java([
+  "Deque<Integer> stack = new ArrayDeque<>();",
+  "for (int x : new int[] {1, 2, 3, 4}) {",
+  "    stack.push(x);",
+  "}",
+  "while (!stack.isEmpty()) {",
+  '    System.out.print(stack.pop() + " ");',
+  "}",
+]);
+
 const callCode = java([
   "void main()  { load(); }",
   "void load()  { parse(); }",
@@ -66,9 +95,9 @@ const pushSix = push(base, 6, "six");
 const pushFive = push(pushSix.after, 5, "five");
 const popFive = pop(pushFive.after);
 const popSix = pop(popFive.after);
-const [, , two] = base;
+const [bottom, middle, two] = base;
 
-// The independent exercise: lines 2-3 build {3, 7}; the learner runs lines 4-8.
+// The independent trace: lines 2-3 build {3, 7}; the learner runs lines 4-8.
 const traceStart = stackFromValues([3, 7], "t");
 const traceRun = runOperations(traceStart, [
   { type: "push", value: 1 },
@@ -79,21 +108,67 @@ const traceRun = runOperations(traceStart, [
 ]);
 const lastPopped = traceRun.steps[traceRun.steps.length - 1].before.at(-1);
 
+// Reversal: push 1..4, then pop everything.
+const reverseRun = runOperations(
+  [],
+  [
+    ...[1, 2, 3, 4].map((value) => ({ type: "push" as const, value })),
+    ...[1, 2, 3, 4].map(() => ({ type: "pop" as const })),
+  ],
+  "r",
+);
+const reversePushed = reverseRun.steps[3].after;
+
+const pages = stackFromValues(["home", "search", "results"], "page");
 const history = stackFromValues(["type", "bold", "delete"], "edit");
-// Scanning "(a[b]{c})" just after reading "{": "[" was matched by "]" and popped.
-const brackets = push(pop(push(stackFromValues(["("], "open"), "[", "open1").after).after, "{", "open2");
+// Checking "([)]": "(" and "[" are pushed, then ")" arrives.
+const brackets = stackFromValues(["(", "["], "open");
 const calls = stackFromValues(["main()", "load()", "parse()"], "call");
 
 export const stackLesson = defineLesson({
   id: "stack",
   title: "Stack",
   subtitle: "Watch values enter and leave from one end.",
+  sources: [
+    {
+      title: "OpenDSA: Stacks (array-based)",
+      url: "https://opendsa-server.cs.vt.edu/ODSA/RST/en/List/StackArray.rst",
+      role: "concept",
+    },
+    {
+      title: "OpenDSA: Queues (for the FIFO contrast)",
+      url: "https://opendsa-server.cs.vt.edu/ODSA/RST/en/List/Queue.rst",
+      role: "concept",
+    },
+    {
+      title: "Algorithms, 4th Edition, 1.3 Bags, Queues, and Stacks",
+      url: "https://algs4.cs.princeton.edu/13stacks/",
+      role: "pedagogy",
+    },
+    {
+      title: "algs4 ResizingArrayStack.java",
+      url: "https://algs4.cs.princeton.edu/13stacks/ResizingArrayStack.java.html",
+      role: "implementation",
+    },
+    {
+      title: "Java SE API: ArrayDeque",
+      url: "https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/ArrayDeque.html",
+      role: "implementation",
+    },
+  ],
   steps: [
+    {
+      id: "purpose",
+      mode: "show",
+      title: "Sometimes only the most recent thing matters.",
+      body: "A browser's Back button returns to the page you visited last, then the one before that. Many problems work like this: the newest unfinished item is the one you need next. A stack is the structure built for exactly that.",
+      visual: { kind: "stack", items: pages, marks: { page2: "focus" } },
+    },
     {
       id: "pile",
       mode: "show",
       title: "Values pile up, one on another.",
-      body: "4 went in first, then 8, then 2. Each new value lands on the one before it, so the most recent one, 2, is on top. The top is the only place anything happens.",
+      body: "4 went in first, then 8, then 2. Each new value lands on the one before it, so the most recent one, 2, is on top. The top is the only value you can reach.",
       visual: { kind: "stack", items: base },
       code: { ...usageCode, highlight: [1, 2, 3, 4] },
     },
@@ -120,11 +195,7 @@ export const stackLesson = defineLesson({
         kind: "choice",
         prompt: "After `stack.push(5)`, which value is on top?",
         options: [
-          {
-            id: "six",
-            label: "6",
-            feedback: "6 was the top until now. push puts 5 above it.",
-          },
+          { id: "six", label: "6", feedback: "6 was the top until now. push puts 5 above it." },
           { id: "five", label: "5" },
           {
             id: "four",
@@ -135,9 +206,7 @@ export const stackLesson = defineLesson({
         correctOptionId: "five",
         explanation: "push always adds at the top, so the newest value is on top.",
       },
-      reveal: {
-        visual: { kind: "stack", items: pushFive.after, marks: { five: "focus" } },
-      },
+      reveal: { visual: { kind: "stack", items: pushFive.after, marks: { five: "focus" } } },
     },
     {
       id: "predict-peek",
@@ -150,28 +219,15 @@ export const stackLesson = defineLesson({
         kind: "choice",
         prompt: "What does `stack.peek()` return?",
         options: [
-          {
-            id: "four",
-            label: "4",
-            feedback: "4 has been there longest, but peek reads the top.",
-          },
-          {
-            id: "six",
-            label: "6",
-            feedback: "6 is just below the top.",
-          },
+          { id: "four", label: "4", feedback: "4 has been there longest, but peek reads the top." },
+          { id: "six", label: "6", feedback: "6 is just below the top." },
           { id: "five", label: "5" },
         ],
         correctOptionId: "five",
         explanation: "peek() returns the top value, 5, and leaves it where it is.",
       },
       reveal: {
-        visual: {
-          kind: "stack",
-          items: pushFive.after,
-          marks: { five: "focus" },
-          callout: "peek() → 5",
-        },
+        visual: { kind: "stack", items: pushFive.after, marks: { five: "focus" }, callout: "peek() → 5" },
       },
     },
     {
@@ -186,26 +242,14 @@ export const stackLesson = defineLesson({
         prompt: "Which value does `stack.pop()` return?",
         options: [
           { id: "five", label: "5" },
-          {
-            id: "four",
-            label: "4",
-            feedback: "4 is the oldest value. A stack hands back the newest first.",
-          },
-          {
-            id: "six",
-            label: "6",
-            feedback: "6 is underneath 5, so it has to wait.",
-          },
+          { id: "four", label: "4", feedback: "4 is the oldest value. A stack hands back the newest first." },
+          { id: "six", label: "6", feedback: "6 is underneath 5, so it has to wait." },
         ],
         correctOptionId: "five",
         explanation: "pop() removes the top value and returns it.",
       },
       reveal: {
-        visual: {
-          kind: "stack",
-          items: popFive.after,
-          held: { id: "five", value: 5, label: "pop() → 5" },
-        },
+        visual: { kind: "stack", items: popFive.after, held: { id: "five", value: 5, label: "pop() → 5" } },
       },
     },
     {
@@ -213,13 +257,9 @@ export const stackLesson = defineLesson({
       mode: "trace",
       title: "Pop again: 6 leaves next.",
       body: `With 5 gone, 6 is on top, so the next \`pop()\` returns 6, and ${two.value} becomes the top again.`,
-      visual: {
-        kind: "stack",
-        items: popSix.after,
-        held: { id: "six", value: 6, label: "pop() → 6" },
-      },
+      visual: { kind: "stack", items: popSix.after, held: { id: "six", value: 6, label: "pop() → 6" } },
       code: { ...usageCode, highlight: [9] },
-      practice: { kind: "stack-operations", difficulty: "intro" },
+      practice: { kind: "stack-operations", difficulty: "intro", skills: ["top", "popped", "peek"] },
     },
     {
       id: "explain-lifo",
@@ -235,25 +275,158 @@ export const stackLesson = defineLesson({
             label: "pop() removes the largest value.",
             feedback: "6 is larger than 5, yet 5 left first. Arrival order decides, not size.",
           },
-          {
-            id: "recent",
-            label: "The most recently pushed value is always on top.",
-          },
+          { id: "recent", label: "The most recently pushed value is always on top." },
           {
             id: "fifo",
             label: "Values leave in the order they were pushed.",
-            feedback: "That would be first in, first out: a queue. A stack is the reverse.",
+            feedback: "That would be first in, first out, which is a queue. A stack is the reverse.",
           },
         ],
         correctOptionId: "recent",
-        explanation: "Last in, first out (LIFO): the value pushed most recently is the next to leave.",
+        explanation: "Last in, first out (LIFO): values leave in the reverse order they arrived.",
+      },
+    },
+    {
+      id: "solve-trace",
+      mode: "solve",
+      title: "Trace a sequence yourself.",
+      body: "Lines 1–3 built the stack you see. Run lines 4–8 in your head.",
+      visual: { kind: "stack", items: traceStart },
+      code: { ...traceCode, highlight: [4, 5, 6, 7, 8] },
+      question: {
+        kind: "number-list",
+        prompt: "Type the stack from bottom to top after line 8.",
+        expected: stackValues(traceRun.final),
+        explanation: `pop() took ${listValues(traceRun.popped)}, the newest value each time, leaving {${stackValues(traceRun.final).join(", ")}}.`,
+      },
+      reveal: {
+        visual: {
+          kind: "stack",
+          items: traceRun.final,
+          held: lastPopped && {
+            id: lastPopped.id,
+            value: lastPopped.value,
+            label: `pop() → ${lastPopped.value}`,
+          },
+        },
+      },
+      practice: { kind: "stack-operations", difficulty: "standard", skills: ["final", "popped"] },
+    },
+    {
+      id: "one-end",
+      mode: "show",
+      title: "Only one end, on purpose.",
+      body: "A stack hides everything below the top. With only push, pop and peek, nobody can reach in and break the last-in, first-out order, and each operation stays simple and fast. A general list lets you touch any position: more flexible, but that flexibility is not needed here.",
+      visual: {
+        kind: "stack",
+        items: popSix.after,
+        marks: { [bottom.id]: "muted", [middle.id]: "muted", [two.id]: "focus" },
+      },
+    },
+    {
+      id: "inside",
+      mode: "show",
+      title: "Inside a stack: an array and a count.",
+      body: "One way to build a stack, the approach behind algs4's array stack: values live in an array with the bottom at index 0, and `n` counts them. The top is `a[n - 1]`; the next free slot is `a[n]`.",
+      visual: {
+        kind: "array",
+        items: base,
+        pointers: [
+          { index: 2, label: "top" },
+          { index: 3, label: "n = 3" },
+        ],
+      },
+      code: { ...arrayStackCode, highlight: [2, 3] },
+    },
+    {
+      id: "explain-top-end",
+      mode: "explain",
+      title: "Why keep the top at the end?",
+      body: "The top could have been index 0 instead.",
+      code: { ...arrayStackCode, highlight: [4, 5] },
+      question: {
+        kind: "choice",
+        prompt: "Why does this stack keep its top at the end of the array?",
+        options: [
+          {
+            id: "grow",
+            label: "Arrays can only be written at the end.",
+            feedback: "Any slot can be written by index. The point is avoiding shifts.",
+          },
+          { id: "no-shift", label: "Pushing and popping at the end never shifts other values." },
+          {
+            id: "sorted",
+            label: "It keeps the values sorted.",
+            feedback: "A stack keeps arrival order, not sorted order.",
+          },
+        ],
+        correctOptionId: "no-shift",
+        explanation: "With the top at index 0, every push would shift all values right and every pop would shift them left, O(n), just like inserting at the front of an array. At the end, nothing else moves.",
+      },
+    },
+    {
+      id: "array-push",
+      mode: "trace",
+      title: "`push` writes `a[n]`, then `n` grows.",
+      body: "`a[n++] = x` stores 6 in the free slot `a[3]`, then increases `n` to 4. One write and no shifting: O(1).",
+      visual: {
+        kind: "array",
+        items: pushSix.after,
+        marks: { six: "new" },
+        pointers: [
+          { index: 3, label: "top" },
+          { index: 4, label: "n = 4" },
+        ],
+      },
+      code: { ...arrayStackCode, highlight: [4] },
+    },
+    {
+      id: "predict-array-pop",
+      mode: "predict",
+      title: "Pop from the array.",
+      body: "`pop()` runs `return a[--n];` with n = 4.",
+      visual: {
+        kind: "array",
+        items: pushSix.after,
+        pointers: [
+          { index: 3, label: "top" },
+          { index: 4, label: "n = 4" },
+        ],
+      },
+      code: { ...arrayStackCode, highlight: [5] },
+      question: {
+        kind: "choice",
+        prompt: "What does `pop()` return, and what is `n` afterwards?",
+        options: [
+          { id: "right", label: "6, and n becomes 3" },
+          { id: "bottom", label: "4, and n becomes 3", feedback: "`a[0]` is the bottom; pop reads the top, `a[n - 1]`." },
+          {
+            id: "stays",
+            label: "6, and n stays 4",
+            feedback: "`--n` lowers n before reading, so slot 3 becomes free.",
+          },
+        ],
+        correctOptionId: "right",
+        explanation: "`--n` drops n to 3, then `a[3]`, the 6, is returned. The 6 is still in the array, but it sits past n, so it is free space now; the next push overwrites it.",
+      },
+      reveal: {
+        visual: {
+          kind: "array",
+          items: pushSix.after,
+          marks: { six: "muted" },
+          pointers: [
+            { index: 2, label: "top" },
+            { index: 3, label: "n = 3" },
+          ],
+          caption: "a[3] still holds 6, but it is past n: free space",
+        },
       },
     },
     {
       id: "complexity",
       mode: "show",
-      title: "Every operation touches only the top.",
-      body: "push, pop and peek never look at 4 or 8. However tall the stack grows, each does the same small amount of work: push is O(1), pop is O(1), peek is O(1).",
+      title: "push, pop and peek are all O(1).",
+      body: "Each operation reads or writes one slot at the top, however many values lie below. `ArrayDeque` sometimes copies its array into a bigger one when it fills up, but spread over many pushes that averages out to constant time.",
       visual: { kind: "stack", items: popSix.after, marks: { [two.id]: "focus" } },
       code: { ...usageCode, highlight: [6, 7, 8] },
     },
@@ -268,11 +441,7 @@ export const stackLesson = defineLesson({
         kind: "choice",
         prompt: "What does `stack.peek()` return on an empty stack?",
         options: [
-          {
-            id: "zero",
-            label: "0",
-            feedback: "Java does not invent a value. An empty Deque has no top.",
-          },
+          { id: "zero", label: "0", feedback: "Java does not invent a value. An empty Deque has no top." },
           { id: "null", label: "null" },
           {
             id: "throws",
@@ -281,14 +450,41 @@ export const stackLesson = defineLesson({
           },
         ],
         correctOptionId: "null",
-        explanation: "On an empty `ArrayDeque`, `peek()` returns null and `pop()` throws `NoSuchElementException`. Check `isEmpty()` before popping.",
+        explanation: "On an empty `ArrayDeque`, `peek()` returns null and `pop()` throws `NoSuchElementException`.",
+      },
+    },
+    {
+      id: "complete-drain",
+      mode: "complete",
+      title: "Pop only while something is there.",
+      body: "This code prints and removes every value. The loop condition is missing.",
+      visual: { kind: "stack", items: base },
+      code: { ...drainCode, highlight: [2], blankLine: 1 },
+      question: {
+        kind: "choice",
+        prompt: "Which loop header is safe?",
+        options: [
+          {
+            id: "count",
+            label: "for (int i = 0; i < 5; i++) {",
+            feedback: "It assumes exactly 5 values. With fewer, pop() on an empty stack throws NoSuchElementException.",
+          },
+          { id: "empty", label: "while (!stack.isEmpty()) {" },
+          {
+            id: "peek",
+            label: "while (stack.peek() != 0) {",
+            feedback: "On an empty stack peek() returns null, and comparing null with 0 throws NullPointerException. It would also stop early at a real 0.",
+          },
+        ],
+        correctOptionId: "empty",
+        explanation: "Check `isEmpty()` before every pop. The stack itself says when it is done.",
       },
     },
     {
       id: "java",
       mode: "show",
       title: "In Java, use `ArrayDeque` as your stack.",
-      body: "`Deque<Integer> stack = new ArrayDeque<>()` gives you `push`, `pop` and `peek`, all at the same end. Java also has an older `Stack` class, but it synchronizes every call (slower) and exposes index methods like `get(i)` that break the one-end rule. Java's own docs recommend `ArrayDeque`.",
+      body: "`Deque<Integer> stack = new ArrayDeque<>()` gives you `push`, `pop` and `peek`, all at the same end. Java also has an older `Stack` class, but it adds index-based methods that break the one-end rule, and its own documentation points to `Deque` instead.",
       visual: { kind: "stack", items: base },
       code: { ...usageCode, highlight: [1] },
     },
@@ -318,68 +514,84 @@ export const stackLesson = defineLesson({
         correctOptionId: "pop",
         explanation: "pop() removes the most recent edit so it can be reverted, leaving the previous edit on top for the next undo.",
       },
+      practice: { kind: "stack-operations", difficulty: "standard", skills: ["operation"] },
     },
     {
-      id: "solve-trace",
+      id: "solve-reverse",
       mode: "solve",
-      title: "Trace it yourself.",
-      body: "Lines 1–3 built the stack you see. Run lines 4–8 in your head.",
-      visual: { kind: "stack", items: traceStart },
-      code: { ...traceCode, highlight: [4, 5, 6, 7, 8] },
+      title: "New problem: what does this print?",
+      body: "Four values go in, then everything comes back out.",
+      visual: { kind: "stack", items: [] },
+      code: { ...reverseCode, highlight: [3, 6] },
       question: {
         kind: "number-list",
-        prompt: "Type the stack from bottom to top after line 8.",
-        expected: stackValues(traceRun.final),
-        explanation: `pop() took ${listValues(traceRun.popped)}, the newest value each time, leaving {${stackValues(traceRun.final).join(", ")}}.`,
+        prompt: "Type the numbers printed, in order.",
+        expected: reverseRun.popped,
+        explanation: `The last value pushed is the first popped, so the output is the input reversed: ${reverseRun.popped.join(" ")}.`,
       },
       reveal: {
         visual: {
           kind: "stack",
-          items: traceRun.final,
-          held: lastPopped && {
-            id: lastPopped.id,
-            value: lastPopped.value,
-            label: `pop() → ${lastPopped.value}`,
-          },
+          items: reversePushed,
+          marks: { [reversePushed[reversePushed.length - 1].id]: "focus" },
+          caption: `after the pushes; pops come off the top: ${reverseRun.popped.join(", ")}`,
         },
       },
-      practice: { kind: "stack-operations", difficulty: "standard" },
+    },
+    {
+      id: "predict-brackets",
+      mode: "predict",
+      title: "Do these brackets match?",
+      body: "Checking `([)]` left to right, each opener is pushed. Now `)` arrives.",
+      visual: {
+        kind: "stack",
+        items: brackets,
+        marks: { open1: "focus" },
+        caption: "next character: )",
+      },
+      question: {
+        kind: "choice",
+        prompt: "Is `([)]` balanced?",
+        options: [
+          {
+            id: "count",
+            label: "Yes: two openers and two closers",
+            feedback: "Counting is not enough. Each closer must match the most recent unmatched opener.",
+          },
+          {
+            id: "inside",
+            label: "Yes: `(` is in the stack",
+            feedback: "It is there, but underneath `[`. Only the top can be matched.",
+          },
+          { id: "no", label: "No: when `)` arrives, the top is `[`" },
+        ],
+        correctOptionId: "no",
+        explanation: "The most recent opener must close first. `)` meets `[` on top, so the brackets are not balanced. Push openers; on a closer, pop and compare.",
+      },
     },
     {
       id: "recognize",
       mode: "explain",
-      title: "Spot the stack-shaped problem.",
-      body: "A stack fits when the most recently started, unfinished thing is the next one you need to finish.",
-      visual: { kind: "stack", items: [] },
+      title: "Stack or something else?",
+      body: "A stack hands back the newest item (LIFO). A queue, which comes later, hands back the oldest (FIFO), like a line at a ticket counter.",
       question: {
         kind: "choice",
-        prompt: "Which task is stack-shaped?",
+        prompt: "Which situation calls for a stack?",
         options: [
           {
-            id: "queue",
-            label: "Serving customers in the order they arrived",
-            feedback: "That is first come, first served: a queue.",
+            id: "printing",
+            label: "Printing documents in the order they were sent",
+            feedback: "First come, first served is a queue: the oldest job leaves first.",
           },
+          { id: "undo", label: "Undoing edits, newest first" },
           {
-            id: "brackets",
-            label: "Checking that the brackets in `(a[b]{c})` close in the right order",
-          },
-          {
-            id: "max",
-            label: "Finding the largest number in a list",
-            feedback: "Arrival order does not matter for a maximum; one pass with a variable is enough.",
+            id: "position",
+            label: "Looking up the 3rd item by position",
+            feedback: "A stack hides everything but the top. An array fits position lookups.",
           },
         ],
-        correctOptionId: "brackets",
-        explanation: "Each `(`, `[` or `{` stays unfinished until its closer appears, and the most recent opener must close first. Push openers; pop when a closer arrives.",
-      },
-      reveal: {
-        visual: {
-          kind: "stack",
-          items: brackets.after,
-          marks: { open2: "new" },
-          caption: "Scanning (a[b]{c}): the next closer must be }",
-        },
+        correctOptionId: "undo",
+        explanation: "Undo must reverse the most recent unfinished change first: last in, first out.",
       },
     },
     {

@@ -1,6 +1,7 @@
 import type { ExerciseKindId } from "@/lib/learning/schema";
 import { describeZodError } from "@/lib/learning/validate";
 import { arrayInsertionKind } from "./kinds/arrayInsertion";
+import { arrayRemovalKind } from "./kinds/arrayRemoval";
 import { recursionTraceKind } from "./kinds/recursionTrace";
 import { stackOperationsKind } from "./kinds/stackOperations";
 import type { ExerciseKind, ExerciseKindDefinition } from "./types";
@@ -24,6 +25,7 @@ function erase<Candidate, Truth>(
         ok: true,
         value: {
           fingerprint: definition.fingerprint(parsed.data),
+          skill: definition.skill(parsed.data),
           ...definition.compile(parsed.data, verified.value),
         },
       };
@@ -34,6 +36,7 @@ function erase<Candidate, Truth>(
 /** Adding an exercise format = adding its definition here. */
 export const exerciseKinds: Record<ExerciseKindId, ExerciseKind> = {
   "array-insertion": erase(arrayInsertionKind),
+  "array-removal": erase(arrayRemovalKind),
   "stack-operations": erase(stackOperationsKind),
   "recursion-trace": erase(recursionTraceKind),
 };

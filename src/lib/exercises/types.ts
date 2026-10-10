@@ -36,6 +36,8 @@ export interface ExerciseGenerator {
 /** Exercise content that passed domain verification, before lesson validation. */
 export type CompiledExercise = {
   fingerprint: string;
+  /** Which of the kind's skills this exercise drills. */
+  skill: string;
   difficulty: Difficulty;
   title: string;
   subtitle: string;
@@ -52,9 +54,11 @@ export type ExerciseKindDefinition<Candidate, Truth> = {
   label: string;
   schema: z.ZodType<Candidate>;
   fingerprint: (candidate: Candidate) => string;
+  /** The skill (from EXERCISE_SKILLS) this candidate drills. */
+  skill: (candidate: Candidate) => string;
   /** Recompute the truth and compare it with the candidate's claims. */
   verify: (candidate: Candidate) => ValidationResult<Truth>;
-  compile: (candidate: Candidate, truth: Truth) => Omit<CompiledExercise, "fingerprint">;
+  compile: (candidate: Candidate, truth: Truth) => Omit<CompiledExercise, "fingerprint" | "skill">;
 };
 
 /** Type-erased view of a kind, so kinds with different candidates share one registry. */
@@ -68,6 +72,7 @@ export type ExerciseKind = {
 /** An exercise that is safe to render. */
 export type AcceptedExercise = {
   fingerprint: string;
+  skill: string;
   kind: ExerciseKindId;
   concept: string;
   label: string;

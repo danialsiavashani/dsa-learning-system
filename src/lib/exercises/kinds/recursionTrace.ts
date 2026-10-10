@@ -15,6 +15,7 @@ import {
 } from "@/lib/domain/recursion";
 import {
   difficultySchema,
+  EXERCISE_SKILLS,
   type ChoiceQuestion,
   type LessonStepInput,
   type NumberListQuestion,
@@ -29,16 +30,7 @@ import type { ExerciseKindDefinition } from "../types";
  * result; the candidate's claims about them are checked, never used.
  */
 
-export const RECURSION_ASKS = [
-  "next-call",
-  "base-return",
-  "return-value",
-  "resumes",
-  "final",
-  "calls",
-  "returns",
-  "printed",
-] as const;
+export const RECURSION_ASKS = EXERCISE_SKILLS["recursion-trace"];
 export type RecursionAsk = (typeof RECURSION_ASKS)[number];
 
 /** Asks that are about one particular frame. */
@@ -384,6 +376,7 @@ export const recursionTraceKind: ExerciseKindDefinition<RecursionCandidate, Recu
   label: "Recursion trace",
   schema: recursionCandidateSchema,
   fingerprint: fingerprintOf,
+  skill: (candidate) => candidate.ask,
   verify,
   compile,
 };

@@ -11,6 +11,7 @@ import {
 import { listValues } from "@/lib/learning/format";
 import {
   difficultySchema,
+  EXERCISE_SKILLS,
   type ChoiceQuestion,
   type LessonStepInput,
 } from "@/lib/learning/schema";
@@ -25,7 +26,7 @@ import type { ExerciseKindDefinition } from "../types";
  * the stack domain, and every answer key is derived from the domain here.
  */
 
-export const STACK_ASKS = ["top", "popped", "peek", "final", "operation"] as const;
+export const STACK_ASKS = EXERCISE_SKILLS["stack-operations"];
 export type StackAsk = (typeof STACK_ASKS)[number];
 
 /** Most values the stack may hold at once, so it fits the visualizer. */
@@ -500,6 +501,7 @@ export const stackOperationsKind: ExerciseKindDefinition<StackCandidate, Truth> 
   label: "Stack operations",
   schema: stackCandidateSchema,
   fingerprint: fingerprintOf,
+  skill: (candidate) => candidate.ask,
   verify,
   compile,
 };

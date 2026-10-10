@@ -50,6 +50,43 @@ export function readAt(items: ArrayItem[], index: number): ArrayItem {
   return items[index];
 }
 
+/** Replaces the value at `index` in place: same item, same position, new value. */
+export function updateAt(items: ArrayItem[], index: number, value: number): ArrayItem[] {
+  const target = readAt(items, index);
+  return items.map((item) => (item === target ? { ...item, value } : item));
+}
+
+export type RemovalResult = {
+  before: ArrayItem[];
+  /** State after the value at `index` is taken out, leaving a gap in its slot. */
+  opened: ArrayItem[];
+  after: ArrayItem[];
+  index: number;
+  removed: ArrayItem;
+  /** Items that move one position to the left, in their original order. */
+  shifted: ArrayItem[];
+  /** Items whose position does not change. */
+  unchanged: ArrayItem[];
+};
+
+/**
+ * Removes the item at `index` (0 <= index < length), shifting every later
+ * item one position left to close the gap. Removing the last item shifts
+ * nothing.
+ */
+export function removeAt(items: ArrayItem[], index: number): RemovalResult {
+  const removed = readAt(items, index);
+  return {
+    before: items,
+    opened: items.map((item) => (item === removed ? { id: item.id, value: null } : item)),
+    after: items.filter((item) => item !== removed),
+    index,
+    removed,
+    shifted: items.slice(index + 1),
+    unchanged: items.slice(0, index),
+  };
+}
+
 /**
  * Inserts `value` at `index` (0 <= index <= length), shifting every item at
  * or after `index` one position right. Inserting at `length` appends and

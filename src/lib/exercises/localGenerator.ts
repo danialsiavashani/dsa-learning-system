@@ -1,4 +1,4 @@
-import { insertAt, itemsFromValues, valuesOf } from "@/lib/domain/array";
+import { insertAt, itemsFromValues, removeAt, valuesOf } from "@/lib/domain/array";
 import {
   recursiveFunctions,
   traceRecursion,
@@ -15,13 +15,16 @@ import {
   arrayInsertionKind,
   type ArrayInsertionCandidate,
 } from "./kinds/arrayInsertion";
+import { arrayRemovalKind, type ArrayRemovalCandidate } from "./kinds/arrayRemoval";
 import {
+  RECURSION_ASKS,
   recursionTraceKind,
   type RecursionAsk,
   type RecursionCandidate,
 } from "./kinds/recursionTrace";
 import {
   MAX_STACK_SIZE,
+  STACK_ASKS,
   stackOperationsKind,
   type StackAsk,
   type StackCandidate,
@@ -91,6 +94,43 @@ function arrayInsertionCandidate(
   };
 }
 
+type RemovalProfile = {
+  length: [number, number];
+  index: (random: Random, length: number) => number;
+};
+
+const removalProfiles: Record<Difficulty, RemovalProfile> = {
+  // Values on both sides of the removed slot.
+  intro: { length: [4, 5], index: (random, length) => randomInt(random, 1, length - 2) },
+  standard: { length: [5, 6], index: (random, length) => randomInt(random, 0, length - 1) },
+  // Edge cases half the time: the first or the last slot.
+  challenge: {
+    length: [5, 7],
+    index: (random, length) =>
+      random() < 0.5 ? (random() < 0.5 ? 0 : length - 1) : randomInt(random, 0, length - 1),
+  },
+};
+
+function arrayRemovalCandidate(difficulty: Difficulty, random: Random): ArrayRemovalCandidate {
+  const profile = removalProfiles[difficulty];
+  const length = randomInt(random, ...profile.length);
+  const initial = distinctInts(random, length, 1, 20);
+  const index = profile.index(random, length);
+  const outcome = removeAt(itemsFromValues(initial), index);
+  return {
+    kind: "array-removal",
+    concept: "arrays.removal",
+    difficulty,
+    initial,
+    operation: { type: "remove", index },
+    expected: {
+      result: valuesOf(outcome.after) as number[],
+      removed: outcome.removed.value as number,
+      shifted: valuesOf(outcome.shifted) as number[],
+    },
+  };
+}
+
 type StackProfile = {
   initial: [number, number];
   operations: [number, number];
@@ -110,8 +150,22 @@ const stackProfiles: Record<Difficulty, StackProfile> = {
   challenge: { initial: [0, 3], operations: [3, 5], asks: ["final", "popped", "top"] },
 };
 
-function stackCandidate(difficulty: Difficulty, random: Random): StackCandidate {
-  const profile = stackProfiles[difficulty];
+/**
+ * The questions to draw from: the difficulty's usual mix, narrowed to the
+ * requested skills. If the difficulty never asks a requested skill, the
+ * request wins, so practice always drills what was asked for.
+ */
+function allowedAsks<A extends string>(usual: readonly A[], all: readonly A[], skills?: string[]): A[] {
+  if (!skills) return [...usual];
+  const narrowed = usual.filter((ask) => skills.includes(ask));
+  return narrowed.length > 0 ? narrowed : all.filter((ask) => skills.includes(ask));
+}
+
+function stackCandidate(difficulty: Difficulty, random: Random, skills?: string[]): StackCandidate {
+  const profile = {
+    ...stackProfiles[difficulty],
+    asks: allowedAsks(stackProfiles[difficulty].asks, STACK_ASKS, skills),
+  };
   // Rejection sampling: draw sequences until one supports the chosen question.
   for (let attempt = 0; attempt < 1000; attempt++) {
     const ask = profile.asks[randomInt(random, 0, profile.asks.length - 1)];
@@ -198,8 +252,15 @@ const recursionProfiles: Record<Difficulty, RecursionProfile> = {
 
 const VALUE_ASKS: readonly RecursionAsk[] = ["base-return", "return-value", "final", "returns"];
 
-function recursionCandidate(difficulty: Difficulty, random: Random): RecursionCandidate {
-  const profile = recursionProfiles[difficulty];
+function recursionCandidate(
+  difficulty: Difficulty,
+  random: Random,
+  skills?: string[],
+): RecursionCandidate {
+  const profile = {
+    ...recursionProfiles[difficulty],
+    asks: allowedAsks(recursionProfiles[difficulty].asks, RECURSION_ASKS, skills),
+  };
   const functions = Object.keys(profile.inputs) as RecursiveFunctionId[];
   for (let attempt = 0; attempt < 1000; attempt++) {
     const fn = functions[randomInt(random, 0, functions.length - 1)];
@@ -241,6 +302,7 @@ function recursionCandidate(difficulty: Difficulty, random: Random): RecursionCa
 type LocalFactory = (
   difficulty: Difficulty,
   random: Random,
+  skills?: string[],
 ) => { candidate: unknown; fingerprint: string };
 
 const factories: Record<ExerciseKindId, LocalFactory> = {
@@ -248,12 +310,16 @@ const factories: Record<ExerciseKindId, LocalFactory> = {
     const candidate = arrayInsertionCandidate(difficulty, random);
     return { candidate, fingerprint: arrayInsertionKind.fingerprint(candidate) };
   },
-  "stack-operations": (difficulty, random) => {
-    const candidate = stackCandidate(difficulty, random);
+  "array-removal": (difficulty, random) => {
+    const candidate = arrayRemovalCandidate(difficulty, random);
+    return { candidate, fingerprint: arrayRemovalKind.fingerprint(candidate) };
+  },
+  "stack-operations": (difficulty, random, skills) => {
+    const candidate = stackCandidate(difficulty, random, skills);
     return { candidate, fingerprint: stackOperationsKind.fingerprint(candidate) };
   },
-  "recursion-trace": (difficulty, random) => {
-    const candidate = recursionCandidate(difficulty, random);
+  "recursion-trace": (difficulty, random, skills) => {
+    const candidate = recursionCandidate(difficulty, random, skills);
     return { candidate, fingerprint: recursionTraceKind.fingerprint(candidate) };
   },
 };
@@ -266,9 +332,9 @@ export function createLocalGenerator(random: Random = Math.random): ExerciseGene
       const avoid = new Set(request.avoid ?? []);
 
       // Re-roll a few times so a repeat of an earlier example is unlikely.
-      let draft = create(request.difficulty, random);
+      let draft = create(request.difficulty, random, request.skills);
       for (let i = 0; i < 10 && avoid.has(draft.fingerprint); i++) {
-        draft = create(request.difficulty, random);
+        draft = create(request.difficulty, random, request.skills);
       }
       return draft.candidate;
     },
