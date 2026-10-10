@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { VisualState } from "@/lib/learning/schema";
 import AnimatedArray from "./AnimatedArray";
+import CallStackVisualizer from "./CallStackVisualizer";
 import StackVisualizer from "./StackVisualizer";
 
 export type VisualKind = VisualState["kind"];
@@ -17,4 +18,5 @@ export type VisualizerProps<K extends VisualKind> = {
 export const visualizers: { [K in VisualKind]: ComponentType<VisualizerProps<K>> } = {
   array: AnimatedArray,
   stack: StackVisualizer,
+  callStack: CallStackVisualizer,
 };

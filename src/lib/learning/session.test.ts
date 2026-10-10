@@ -95,7 +95,7 @@ describe("stage frames", () => {
 
     const answered = answerGuess(open, [1, 2]);
     const frame = stageFrame(steps, 1, answered);
-    expect(frame.visual?.items).toHaveLength(2);
+    expect(frame.visual).toMatchObject({ kind: "array", items: [{}, {}] });
     expect(frame.replayFrom).toBe(steps[0].visual);
   });
 

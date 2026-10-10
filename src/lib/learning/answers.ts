@@ -58,12 +58,15 @@ function checkNumberList(
 
   let feedback = "Correct.";
   if (!correct) {
-    feedback =
-      values.length !== question.expected.length
-        ? `Not quite. Your answer has ${values.length} values; the result has ${question.expected.length}.`
-        : `Not quite. The first difference is at index ${values.findIndex(
-            (value, index) => value !== question.expected[index],
-          )}.`;
+    const expected = question.expected.length;
+    if (values.length !== expected) {
+      feedback = `Not quite. Your answer has ${values.length} ${values.length === 1 ? "value" : "values"}; the answer has ${expected}.`;
+    } else if (expected === 1) {
+      feedback = "Not quite.";
+    } else {
+      const position = values.findIndex((value, index) => value !== question.expected[index]) + 1;
+      feedback = `Not quite. The first difference is value ${position} of ${expected}.`;
+    }
   }
 
   return {

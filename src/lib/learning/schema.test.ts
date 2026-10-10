@@ -227,3 +227,47 @@ describe("lesson validation", () => {
     expect(() => defineLesson(lessonWith())).toThrow(LessonValidationError);
   });
 });
+
+describe("call stack visual validation", () => {
+  const callStackStep = (visual: Record<string, unknown>): LessonStepInput =>
+    ({ id: "c", mode: "show", title: "Calls", visual: { kind: "callStack", ...visual } }) as LessonStepInput;
+  const frames = [
+    { id: "main", call: "main()", status: "waiting" },
+    { id: "f0", call: "factorial(2)", status: "waiting", detail: "2 * factorial(1)" },
+    { id: "f1", call: "factorial(1)", status: "base", detail: "n <= 1: return 1" },
+  ];
+
+  it("accepts a valid stack with a carried value", () => {
+    expect(
+      problemsOf(
+        lessonWith(callStackStep({ frames, carry: { id: "r", value: "1", frameId: "f1" }, phase: "unwinding" })),
+      ),
+    ).toEqual([]);
+  });
+
+  it("rejects an active frame below the top", () => {
+    const broken = [frames[0], { ...frames[1], status: "running" }, frames[2]];
+    expect(problemsOf(lessonWith(callStackStep({ frames: broken }))).join()).toContain("must be waiting");
+  });
+
+  it("rejects a carried value on a missing frame, a non-top entering frame and duplicate ids", () => {
+    const problems = problemsOf(
+      lessonWith(
+        callStackStep({
+          frames: [...frames, { ...frames[2] }],
+          carry: { id: "r", value: "1", frameId: "ghost" },
+          entering: "main",
+        }),
+      ),
+    ).join();
+    expect(problems).toContain('Duplicate frame id "f1"');
+    expect(problems).toContain("unknown frame");
+    expect(problems).toContain("Only the top frame");
+  });
+
+  it("rejects stacks too tall to show", () => {
+    const tall = Array.from({ length: 8 }, (_, i) => ({ id: `f${i}`, call: `f(${i})`, status: "waiting" }));
+    expect(problemsOf(lessonWith(callStackStep({ frames: tall })))).not.toEqual([]);
+  });
+});
+

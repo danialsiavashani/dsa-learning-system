@@ -1,6 +1,7 @@
 import type { ExerciseKindId } from "@/lib/learning/schema";
 import { describeZodError } from "@/lib/learning/validate";
 import { arrayInsertionKind } from "./kinds/arrayInsertion";
+import { recursionTraceKind } from "./kinds/recursionTrace";
 import { stackOperationsKind } from "./kinds/stackOperations";
 import type { ExerciseKind, ExerciseKindDefinition } from "./types";
 
@@ -34,4 +35,5 @@ function erase<Candidate, Truth>(
 export const exerciseKinds: Record<ExerciseKindId, ExerciseKind> = {
   "array-insertion": erase(arrayInsertionKind),
   "stack-operations": erase(stackOperationsKind),
+  "recursion-trace": erase(recursionTraceKind),
 };

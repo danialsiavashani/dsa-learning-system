@@ -53,8 +53,13 @@ describe("checkAnswer: number-list", () => {
   it("points at the first difference", () => {
     const result = checkAnswer(numbers, { kind: "number-list", values: [4, 8, 5] });
     expect(result.correct).toBe(false);
-    expect(result.feedback).toContain("index 1");
+    expect(result.feedback).toContain("value 2 of 3");
     expect(result.correctAnswer).toBe("4, 5, 8");
+  });
+
+  it("keeps feedback plain for a single-value answer", () => {
+    const single: NumberListQuestion = { kind: "number-list", prompt: "Result?", expected: [24] };
+    expect(checkAnswer(single, { kind: "number-list", values: [6] }).feedback).toBe("Not quite.");
   });
 
   it("explains a length mismatch", () => {

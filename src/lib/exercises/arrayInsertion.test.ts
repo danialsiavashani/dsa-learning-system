@@ -42,9 +42,9 @@ describe("accepting valid candidates", () => {
       "trace:shift",
       "trace:write",
     ]);
-    expect(lesson.steps[2].visual?.items.map((item) => item.value)).toEqual([
-      4, 8, 7, 2, 9, 3,
-    ]);
+    const written = lesson.steps[2].visual;
+    if (written?.kind !== "array") throw new Error("expected an array visual");
+    expect(written.items.map((item) => item.value)).toEqual([4, 8, 7, 2, 9, 3]);
     expect(lesson.steps[2].practice).toEqual({
       kind: "array-insertion",
       difficulty: "intro",

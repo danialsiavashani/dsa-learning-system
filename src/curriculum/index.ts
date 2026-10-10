@@ -1,5 +1,6 @@
 import type { Lesson } from "@/lib/learning/schema";
 import { arraysLesson } from "./lessons/arrays";
+import { recursionLesson } from "./lessons/recursion";
 import { stackLesson } from "./lessons/stack";
 
 export type Concept = {
@@ -12,6 +13,7 @@ export type Concept = {
 export const concepts: Concept[] = [
   { slug: "arrays", label: "Arrays", lesson: arraysLesson },
   { slug: "stack", label: "Stack", lesson: stackLesson },
+  { slug: "recursion", label: "Recursion", lesson: recursionLesson },
 ];
 
 export function findConcept(slug: string): Concept | undefined {

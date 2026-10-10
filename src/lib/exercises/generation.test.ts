@@ -177,3 +177,57 @@ describe("local stack generator", () => {
     }
   });
 });
+
+describe("local recursion generator", () => {
+  it.each(DIFFICULTIES)("always produces recursion candidates that pass the truth gate (%s)", async (difficulty) => {
+    const generator = createLocalGenerator(seededRandom(31));
+    const request = { kind: "recursion-trace" as const, difficulty };
+
+    for (let i = 0; i < 200; i++) {
+      const raw = await generator.generate(request, context);
+      const result = acceptCandidate(raw, request);
+      if (!result.ok) throw new Error(`${JSON.stringify(raw)}\n${result.problems.join("\n")}`);
+    }
+  });
+
+  it("varies the method, the input, the question and the phase being tested", async () => {
+    const generator = createLocalGenerator(seededRandom(37));
+    const functions = new Set<string>();
+    const asks = new Set<string>();
+    const fingerprints = new Set<string>();
+    const seen: string[] = [];
+
+    for (let i = 0; i < 80; i++) {
+      const result = await produceExercise(generator, {
+        kind: "recursion-trace",
+        difficulty: "standard",
+        avoid: seen,
+      });
+      if (!result.ok) throw new Error(result.problems.join("\n"));
+      const [, call, ask] = /^recursion-trace:(\w+)\(\d+\)\|([\w-]+)\|/.exec(result.value.fingerprint) ?? [];
+      functions.add(call);
+      asks.add(ask);
+      fingerprints.add(result.value.fingerprint);
+      seen.push(result.value.fingerprint);
+    }
+
+    expect(functions).toEqual(new Set(["factorial", "sumTo", "countdown", "countUp"]));
+    expect(asks).toEqual(
+      new Set(["next-call", "base-return", "return-value", "resumes", "final", "calls", "returns", "printed"]),
+    );
+    expect(fingerprints.size).toBe(80);
+  });
+
+  it("keeps call stacks small enough to read", async () => {
+    const generator = createLocalGenerator(seededRandom(41));
+    for (const difficulty of DIFFICULTIES) {
+      for (let i = 0; i < 50; i++) {
+        const result = await produceExercise(generator, { kind: "recursion-trace", difficulty });
+        if (!result.ok) throw new Error(result.problems.join("\n"));
+        for (const step of result.value.lesson.steps) {
+          if (step.visual?.kind === "callStack") expect(step.visual.frames.length).toBeLessThanOrEqual(6);
+        }
+      }
+    }
+  });
+});

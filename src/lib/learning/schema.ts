@@ -13,7 +13,7 @@ import { z } from "zod";
 // ---------------------------------------------------------------------------
 // Shared vocabulary
 
-export const EXERCISE_KINDS = ["array-insertion", "stack-operations"] as const;
+export const EXERCISE_KINDS = ["array-insertion", "stack-operations", "recursion-trace"] as const;
 export const DIFFICULTIES = ["intro", "standard", "challenge"] as const;
 
 export const exerciseKindSchema = z.enum(EXERCISE_KINDS);
@@ -138,9 +138,76 @@ export const stackVisualSchema = z
     }
   });
 
+export const FRAME_STATUSES = ["running", "waiting", "base", "returning"] as const;
+
+/**
+ * A call stack, bottom → top. Only the top frame can be active; every frame
+ * beneath it is waiting for the call above it. `carry` is a returned value
+ * travelling down the stack; it keeps its ID so it visibly moves from the
+ * returning frame to the one that resumes.
+ */
+export const callStackVisualSchema = z
+  .object({
+    kind: z.literal("callStack"),
+    frames: z
+      .array(
+        z.object({
+          id: idSchema,
+          call: z.string().trim().min(1).max(28),
+          status: z.enum(FRAME_STATUSES),
+          detail: z.string().trim().min(1).max(40).optional(),
+        }),
+      )
+      .max(7),
+    carry: z
+      .object({
+        id: idSchema,
+        value: z.string().trim().min(1).max(10),
+        frameId: idSchema,
+        label: z.string().trim().min(1).max(16).optional(),
+      })
+      .optional(),
+    /** The frame that was just called, so it can animate in. */
+    entering: idSchema.optional(),
+    phase: z.enum(["calling", "unwinding"]).optional(),
+    /** Lines printed so far, for methods that print. */
+    output: z.array(z.string().trim().min(1).max(12)).max(10).optional(),
+    caption: shortText.optional(),
+  })
+  .superRefine((visual, ctx) => {
+    const ids = visual.frames.map((frame) => frame.id);
+    for (const id of duplicates(ids)) {
+      ctx.addIssue({ code: "custom", path: ["frames"], message: `Duplicate frame id "${id}".` });
+    }
+    visual.frames.slice(0, -1).forEach((frame, position) => {
+      if (frame.status !== "waiting") {
+        ctx.addIssue({
+          code: "custom",
+          path: ["frames", position, "status"],
+          message: `Frame "${frame.call}" is below the top, so it must be waiting, not ${frame.status}.`,
+        });
+      }
+    });
+    if (visual.carry && !ids.includes(visual.carry.frameId)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["carry", "frameId"],
+        message: `The carried value points at unknown frame "${visual.carry.frameId}".`,
+      });
+    }
+    if (visual.entering && visual.entering !== ids[ids.length - 1]) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["entering"],
+        message: "Only the top frame can be entering: new calls go on top.",
+      });
+    }
+  });
+
 export const visualStateSchema = z.discriminatedUnion("kind", [
   arrayVisualSchema,
   stackVisualSchema,
+  callStackVisualSchema,
 ]);
 
 // ---------------------------------------------------------------------------
@@ -363,6 +430,7 @@ export type Difficulty = z.infer<typeof difficultySchema>;
 export type VisualMark = (typeof VISUAL_MARKS)[number];
 export type ArrayVisual = z.infer<typeof arrayVisualSchema>;
 export type StackVisual = z.infer<typeof stackVisualSchema>;
+export type CallStackVisual = z.infer<typeof callStackVisualSchema>;
 export type VisualState = z.infer<typeof visualStateSchema>;
 export type CodeView = z.infer<typeof codeViewSchema>;
 export type ChoiceQuestion = z.infer<typeof choiceQuestionSchema>;

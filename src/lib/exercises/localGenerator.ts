@@ -1,5 +1,10 @@
 import { insertAt, itemsFromValues, valuesOf } from "@/lib/domain/array";
 import {
+  recursiveFunctions,
+  traceRecursion,
+  type RecursiveFunctionId,
+} from "@/lib/domain/recursion";
+import {
   runOperations,
   stackFromValues,
   stackValues,
@@ -10,6 +15,11 @@ import {
   arrayInsertionKind,
   type ArrayInsertionCandidate,
 } from "./kinds/arrayInsertion";
+import {
+  recursionTraceKind,
+  type RecursionAsk,
+  type RecursionCandidate,
+} from "./kinds/recursionTrace";
 import {
   MAX_STACK_SIZE,
   stackOperationsKind,
@@ -164,6 +174,69 @@ function stackCandidate(difficulty: Difficulty, random: Random): StackCandidate 
   throw new Error(`Could not draw a valid ${difficulty} stack sequence.`);
 }
 
+type RecursionProfile = {
+  inputs: Record<RecursiveFunctionId, [number, number]>;
+  asks: RecursionAsk[];
+};
+
+const recursionProfiles: Record<Difficulty, RecursionProfile> = {
+  // Short traces; one well-defined moment to predict.
+  intro: {
+    inputs: { factorial: [3, 4], sumTo: [2, 3], countdown: [2, 3], countUp: [2, 3] },
+    asks: ["next-call", "base-return", "return-value", "resumes"],
+  },
+  standard: {
+    inputs: { factorial: [3, 5], sumTo: [2, 4], countdown: [2, 4], countUp: [2, 4] },
+    asks: ["next-call", "base-return", "return-value", "resumes", "final", "calls", "returns", "printed"],
+  },
+  // Deeper traces with typed sequences.
+  challenge: {
+    inputs: { factorial: [4, 5], sumTo: [3, 4], countdown: [3, 4], countUp: [3, 4] },
+    asks: ["return-value", "final", "calls", "returns", "printed"],
+  },
+};
+
+const VALUE_ASKS: readonly RecursionAsk[] = ["base-return", "return-value", "final", "returns"];
+
+function recursionCandidate(difficulty: Difficulty, random: Random): RecursionCandidate {
+  const profile = recursionProfiles[difficulty];
+  const functions = Object.keys(profile.inputs) as RecursiveFunctionId[];
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const fn = functions[randomInt(random, 0, functions.length - 1)];
+    const ask = profile.asks[randomInt(random, 0, profile.asks.length - 1)];
+    const spec = recursiveFunctions[fn];
+    if (VALUE_ASKS.includes(ask) && !spec.returnsValue) continue;
+    if (ask === "printed" && !spec.prints) continue;
+
+    const input = randomInt(random, ...profile.inputs[fn]);
+    const trace = traceRecursion(fn, input);
+    const nonBase = trace.calls.slice(0, -1);
+    const focus =
+      ask === "next-call" || ask === "return-value"
+        ? nonBase[randomInt(random, 0, nonBase.length - 1)]
+        : ask === "resumes"
+          ? trace.calls[randomInt(random, 0, trace.calls.length - 1)]
+          : undefined;
+
+    return {
+      kind: "recursion-trace",
+      concept: "recursion.single-call",
+      difficulty,
+      function: fn,
+      input,
+      ask,
+      ...(focus === undefined ? {} : { focus }),
+      expected: {
+        calls: trace.calls,
+        returns: trace.returns,
+        result: trace.result,
+        output: trace.output,
+      },
+    };
+  }
+  throw new Error(`Could not draw a valid ${difficulty} recursion exercise.`);
+}
+
 /** Each factory returns a candidate plus the fingerprint used to avoid repeats. */
 type LocalFactory = (
   difficulty: Difficulty,
@@ -178,6 +251,10 @@ const factories: Record<ExerciseKindId, LocalFactory> = {
   "stack-operations": (difficulty, random) => {
     const candidate = stackCandidate(difficulty, random);
     return { candidate, fingerprint: stackOperationsKind.fingerprint(candidate) };
+  },
+  "recursion-trace": (difficulty, random) => {
+    const candidate = recursionCandidate(difficulty, random);
+    return { candidate, fingerprint: recursionTraceKind.fingerprint(candidate) };
   },
 };
 
