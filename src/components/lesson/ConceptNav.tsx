@@ -10,7 +10,7 @@ type ConceptNavProps = {
 export default function ConceptNav({ concepts, active }: ConceptNavProps) {
   return (
     <nav aria-label="Concepts">
-      <ul className="flex rounded-xl border border-line bg-panel p-1 text-sm font-semibold">
+      <ul className="flex flex-wrap rounded-xl border border-line bg-panel p-1 text-sm font-semibold">
         {concepts.map((concept) => {
           const current = concept.slug === active;
           return (

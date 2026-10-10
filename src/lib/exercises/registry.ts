@@ -2,6 +2,7 @@ import type { ExerciseKindId } from "@/lib/learning/schema";
 import { describeZodError } from "@/lib/learning/validate";
 import { arrayInsertionKind } from "./kinds/arrayInsertion";
 import { arrayRemovalKind } from "./kinds/arrayRemoval";
+import { backtrackingKind } from "./kinds/backtracking";
 import { recursionTraceKind } from "./kinds/recursionTrace";
 import { stackOperationsKind } from "./kinds/stackOperations";
 import { treeDfsKind } from "./kinds/treeDfs";
@@ -41,4 +42,5 @@ export const exerciseKinds: Record<ExerciseKindId, ExerciseKind> = {
   "stack-operations": erase(stackOperationsKind),
   "recursion-trace": erase(recursionTraceKind),
   "tree-dfs": erase(treeDfsKind),
+  backtracking: erase(backtrackingKind),
 };

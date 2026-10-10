@@ -37,10 +37,10 @@ describe("canonical lessons", () => {
     expect(lesson.steps.some((step) => step.practice)).toBe(true);
   });
 
-  it.each(concepts)("the $label lesson cites OpenDSA and algs4", ({ lesson }) => {
+  it.each(concepts)("the $label lesson cites OpenDSA and Princeton (algs4 / introcs)", ({ lesson }) => {
     const urls = (lesson.sources ?? []).map((source) => source.url);
     expect(urls.some((url) => url.includes("opendsa"))).toBe(true);
-    expect(urls.some((url) => url.includes("algs4.cs.princeton.edu"))).toBe(true);
+    expect(urls.some((url) => /(algs4|introcs)\.cs\.princeton\.edu/.test(url))).toBe(true);
   });
 
   it.each(concepts)("the $label lesson keeps asking the learner, not just once per mode", ({ lesson }) => {
@@ -350,5 +350,44 @@ describe("tree visual validation", () => {
     expect(
       problemsOf(lessonWith({ id: "t", mode: "show", title: "T", visual: { kind: "tree", root: "a", nodes: [{ id: "a", value: 1, left: "a", right: null }] } } as LessonStepInput)),
     ).not.toEqual([]);
+  });
+});
+
+describe("backtrack visual validation", () => {
+  const nodes = [
+    { id: "b", label: "[]", parent: null, state: "explored" },
+    { id: "b.1", label: "[1]", parent: "b", state: "explored" },
+    { id: "b.2", label: "[2]", parent: "b", state: "unexplored" },
+  ];
+  const step = (visual: Record<string, unknown>): LessonStepInput =>
+    ({ id: "x", mode: "show", title: "Search", visual: { kind: "backtrack", nodes, current: [], ...visual } }) as LessonStepInput;
+
+  it("accepts a valid search state, with an undo in progress", () => {
+    expect(
+      problemsOf(lessonWith(step({ path: ["b"], current: [], removed: { id: "v1", value: 1 }, results: [{ id: "r0", label: "[1]" }] }))),
+    ).toEqual([]);
+  });
+
+  it("rejects two roots, unknown parents and cycles", () => {
+    const twoRoots = [...nodes, { id: "c", label: "[]", parent: null, state: "unexplored" }];
+    expect(problemsOf(lessonWith(step({ nodes: twoRoots }))).join()).toContain("exactly one root");
+    const orphan = [...nodes, { id: "b.9", label: "[9]", parent: "zz", state: "unexplored" }];
+    expect(problemsOf(lessonWith(step({ nodes: orphan }))).join()).toContain("unknown parent");
+    const cycle = [
+      { id: "b", label: "[]", parent: null, state: "explored" },
+      { id: "x", label: "[1]", parent: "y", state: "explored" },
+      { id: "y", label: "[2]", parent: "x", state: "explored" },
+    ];
+    expect(problemsOf(lessonWith(step({ nodes: cycle }))).join()).toContain("cycle");
+  });
+
+  it("rejects a path that skips a level and an inconsistent current list", () => {
+    expect(problemsOf(lessonWith(step({ path: ["b.1"] }))).join()).toContain("start at the root");
+    expect(problemsOf(lessonWith(step({ path: ["b", "b.1", "b.2"] }))).join()).toContain("not a child");
+    const problems = problemsOf(
+      lessonWith(step({ current: [{ id: "v1", value: 1 }], added: "v9", removed: { id: "v1", value: 1 } })),
+    ).join();
+    expect(problems).toContain("added chip must be in current");
+    expect(problems).toContain("cannot still be in current");
   });
 });

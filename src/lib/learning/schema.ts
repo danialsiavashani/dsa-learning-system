@@ -20,6 +20,7 @@ export const EXERCISE_KINDS = [
   "stack-operations",
   "recursion-trace",
   "tree-dfs",
+  "backtracking",
 ] as const;
 export const DIFFICULTIES = ["intro", "standard", "challenge"] as const;
 
@@ -51,6 +52,17 @@ export const EXERCISE_SKILLS = {
     "path",
     "leaves",
     "visit-position",
+  ],
+  backtracking: [
+    "next-choice",
+    "after-choose",
+    "after-undo",
+    "next-branch",
+    "next-solution",
+    "count",
+    "undo-line",
+    "snapshot-line",
+    "no-undo-bug",
   ],
 } as const satisfies Record<(typeof EXERCISE_KINDS)[number], readonly string[]>;
 
@@ -321,11 +333,87 @@ export const treeVisualSchema = z
     }
   });
 
+export const DECISION_NODE_STATES = ["unexplored", "explored", "solution", "pruned", "cut"] as const;
+
+const chipSchema = z.object({ id: idSchema, value: z.number().int().min(-99).max(99) });
+
+/**
+ * A backtracking search: the decision tree (each node a partial candidate),
+ * the active path of frames, and the one shared mutable list `current`.
+ * `added` is a chip just pushed onto `current`; `removed` is a chip just taken
+ * off it by the undo line, shown leaving. `results` are the saved snapshots.
+ */
+export const backtrackVisualSchema = z
+  .object({
+    kind: z.literal("backtrack"),
+    nodes: z
+      .array(
+        z.object({
+          id: idSchema,
+          label: z.string().trim().min(1).max(12),
+          parent: idSchema.nullable(),
+          state: z.enum(DECISION_NODE_STATES),
+        }),
+      )
+      .min(1)
+      .max(20),
+    path: z.array(idSchema).optional(),
+    current: z.array(chipSchema).max(6),
+    added: idSchema.optional(),
+    removed: chipSchema.optional(),
+    results: z
+      .array(
+        z.object({
+          id: idSchema,
+          label: z.string().trim().min(1).max(16),
+          /** Just saved: animates in. */
+          fresh: z.boolean().optional(),
+        }),
+      )
+      .max(16)
+      .optional(),
+    caption: shortText.optional(),
+  })
+  .superRefine((visual, ctx) => {
+    const byId = new Map(visual.nodes.map((node) => [node.id, node]));
+    const issue = (path: (string | number)[], message: string) => ctx.addIssue({ code: "custom", path, message });
+    for (const id of duplicates(visual.nodes.map((node) => node.id))) issue(["nodes"], `Duplicate node id "${id}".`);
+    const roots = visual.nodes.filter((node) => node.parent === null);
+    if (roots.length !== 1) issue(["nodes"], `A decision tree has exactly one root, not ${roots.length}.`);
+    for (const node of visual.nodes) {
+      if (node.parent !== null && !byId.has(node.parent)) {
+        issue(["nodes"], `Node "${node.id}" has unknown parent "${node.parent}".`);
+      }
+      // Walking up must reach the root without revisiting a node.
+      const seen = new Set<string>();
+      for (let at: string | null = node.id; at !== null; at = byId.get(at)?.parent ?? null) {
+        if (seen.has(at)) {
+          issue(["nodes"], `Node "${node.id}" is part of a cycle.`);
+          break;
+        }
+        seen.add(at);
+      }
+    }
+    const path = visual.path ?? [];
+    if (path.length > 0 && byId.get(path[0])?.parent !== null) issue(["path"], "The path must start at the root.");
+    path.slice(1).forEach((id, i) => {
+      if (byId.get(id)?.parent !== path[i]) issue(["path", i + 1], `"${id}" is not a child of "${path[i]}".`);
+    });
+    const chips = visual.current.map((chip) => chip.id);
+    for (const id of duplicates(chips)) issue(["current"], `Duplicate chip id "${id}".`);
+    if (visual.added && !chips.includes(visual.added)) issue(["added"], "The added chip must be in current.");
+    if (visual.removed && chips.includes(visual.removed.id)) {
+      issue(["removed"], "A removed chip cannot still be in current.");
+    }
+    for (const id of duplicates((visual.results ?? []).map((r) => r.id))) issue(["results"], `Duplicate result id "${id}".`);
+  });
+
 export const visualStateSchema = z.discriminatedUnion("kind", [
   arrayVisualSchema,
   stackVisualSchema,
   callStackVisualSchema,
   treeVisualSchema,
+  backtrackVisualSchema,
 ]);
 
 // ---------------------------------------------------------------------------
@@ -577,6 +665,7 @@ export type ArrayVisual = z.infer<typeof arrayVisualSchema>;
 export type StackVisual = z.infer<typeof stackVisualSchema>;
 export type CallStackVisual = z.infer<typeof callStackVisualSchema>;
 export type TreeVisual = z.infer<typeof treeVisualSchema>;
+export type BacktrackVisual = z.infer<typeof backtrackVisualSchema>;
 export type VisualState = z.infer<typeof visualStateSchema>;
 export type CodeView = z.infer<typeof codeViewSchema>;
 export type ChoiceQuestion = z.infer<typeof choiceQuestionSchema>;

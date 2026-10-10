@@ -1,5 +1,6 @@
 import type { Lesson } from "@/lib/learning/schema";
 import { arraysLesson } from "./lessons/arrays";
+import { backtrackingLesson } from "./lessons/backtracking";
 import { recursionLesson } from "./lessons/recursion";
 import { stackLesson } from "./lessons/stack";
 import { treesLesson } from "./lessons/trees";
@@ -16,6 +17,7 @@ export const concepts: Concept[] = [
   { slug: "stack", label: "Stack", lesson: stackLesson },
   { slug: "recursion", label: "Recursion", lesson: recursionLesson },
   { slug: "trees", label: "Trees", lesson: treesLesson },
+  { slug: "backtracking", label: "Backtracking", lesson: backtrackingLesson },
 ];
 
 export function findConcept(slug: string): Concept | undefined {

@@ -4,6 +4,7 @@ import {
   traceRecursion,
   type RecursiveFunctionId,
 } from "@/lib/domain/recursion";
+import { traceBacktracking, type BacktrackProblem } from "@/lib/domain/backtracking";
 import {
   traversal,
   TRAVERSAL_ORDERS,
@@ -30,6 +31,13 @@ import {
   type RecursionCandidate,
 } from "./kinds/recursionTrace";
 import {
+  BACKTRACK_ASKS,
+  backtrackingKind,
+  momentsFor,
+  type BacktrackAsk,
+  type BacktrackCandidate,
+} from "./kinds/backtracking";
+import {
   TREE_EXERCISE_LIMITS,
   treeDfsKind,
   type TreeAsk,
@@ -42,7 +50,7 @@ import {
   type StackAsk,
   type StackCandidate,
 } from "./kinds/stackOperations";
-import { distinctInts, randomInt, type Random } from "./random";
+import { distinctInts, randomInt, shuffle, type Random } from "./random";
 import type { ExerciseGenerator, ExerciseRequest } from "./types";
 
 /**
@@ -404,6 +412,66 @@ function treeCandidate(difficulty: Difficulty, random: Random, skills?: string[]
   };
 }
 
+type BacktrackProfile = {
+  skills: BacktrackAsk[];
+  /** Draws a problem for this difficulty. */
+  problem: (random: Random) => BacktrackProblem;
+};
+
+const sortedItems = (random: Random, count: number) => distinctInts(random, count, 1, 9).sort((a, b) => a - b);
+
+function permutations(random: Random, ruleChance: number): BacktrackProblem {
+  const items = sortedItems(random, 3);
+  if (random() >= ruleChance) return { type: "permutations", items };
+  const [after, forbid] = shuffle(items, random);
+  return { type: "permutations", items, rule: { after, forbid } };
+}
+
+const backtrackProfiles: Record<Difficulty, BacktrackProfile> = {
+  // Plain orderings of three values: choose, explore, undo.
+  intro: {
+    skills: ["next-choice", "after-choose", "after-undo", "next-branch", "undo-line"],
+    problem: (random) => permutations(random, 0),
+  },
+  standard: {
+    skills: [...BACKTRACK_ASKS],
+    problem: (random) =>
+      random() < 0.3 ? { type: "subsets", items: sortedItems(random, 3) } : permutations(random, 0.4),
+  },
+  // Pruning rules and larger subset searches.
+  challenge: {
+    skills: ["next-branch", "next-solution", "count", "no-undo-bug", "snapshot-line", "after-undo"],
+    problem: (random) =>
+      random() < 0.5 ? { type: "subsets", items: sortedItems(random, randomInt(random, 3, 4)) } : permutations(random, 1),
+  },
+};
+
+const BACKTRACK_MOMENT_ASKS: readonly BacktrackAsk[] = ["next-choice", "after-choose", "after-undo", "next-branch", "next-solution"];
+
+function backtrackCandidate(difficulty: Difficulty, random: Random, skills?: string[]): BacktrackCandidate {
+  const profile = backtrackProfiles[difficulty];
+  const pool = allowedAsks(profile.skills, BACKTRACK_ASKS, skills);
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const ask = pool[randomInt(random, 0, pool.length - 1)];
+    const problem = profile.problem(random);
+    const trace = traceBacktracking(problem);
+    const moments = momentsFor(trace, ask).length;
+    if (BACKTRACK_MOMENT_ASKS.includes(ask) && moments === 0) continue;
+    if (ask === "no-undo-bug" && problem.type !== "permutations") continue;
+    return {
+      kind: "backtracking",
+      concept: "backtracking.basics",
+      difficulty,
+      problem,
+      ask,
+      ...(BACKTRACK_MOMENT_ASKS.includes(ask) ? { moment: randomInt(random, 0, moments - 1) } : {}),
+      // Like a model would, the generator states what it expects to be recorded.
+      expected: { solutions: trace.solutions },
+    };
+  }
+  throw new Error(`Could not draw a valid ${difficulty} backtracking exercise.`);
+}
+
 /** Each factory returns a candidate plus the fingerprint used to avoid repeats. */
 type LocalFactory = (
   difficulty: Difficulty,
@@ -431,6 +499,10 @@ const factories: Record<ExerciseKindId, LocalFactory> = {
   "tree-dfs": (difficulty, random, skills) => {
     const candidate = treeCandidate(difficulty, random, skills);
     return { candidate, fingerprint: treeDfsKind.fingerprint(candidate) };
+  },
+  backtracking: (difficulty, random, skills) => {
+    const candidate = backtrackCandidate(difficulty, random, skills);
+    return { candidate, fingerprint: backtrackingKind.fingerprint(candidate) };
   },
 };
 

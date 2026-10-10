@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { VisualState } from "@/lib/learning/schema";
 import AnimatedArray from "./AnimatedArray";
+import BacktrackVisualizer from "./BacktrackVisualizer";
 import CallStackVisualizer from "./CallStackVisualizer";
 import StackVisualizer from "./StackVisualizer";
 import TreeVisualizer from "./TreeVisualizer";
@@ -21,4 +22,5 @@ export const visualizers: { [K in VisualKind]: ComponentType<VisualizerProps<K>>
   stack: StackVisualizer,
   callStack: CallStackVisualizer,
   tree: TreeVisualizer,
+  backtrack: BacktrackVisualizer,
 };
