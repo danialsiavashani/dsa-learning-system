@@ -391,3 +391,89 @@ describe("backtrack visual validation", () => {
     expect(problems).toContain("cannot still be in current");
   });
 });
+
+describe("queue visual validation", () => {
+  const step = (visual: Record<string, unknown>): LessonStepInput =>
+    ({ id: "s", mode: "show", title: "Queue", visual: { kind: "queue", ...visual } }) as LessonStepInput;
+  const items = [
+    { id: "a", value: 4 },
+    { id: "b", value: 8 },
+  ];
+
+  it("accepts a queue with a value entering at the back and one leaving at the front", () => {
+    expect(
+      problemsOf(
+        lessonWith(
+          step({
+            items,
+            entering: { id: "b", end: "back" },
+            leaving: { id: "z", value: 2, end: "front", label: "poll() → 2" },
+            peek: { end: "front", label: "peek() → 4" },
+          }),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("keeps a plain queue to its two ends; a deque may use either", () => {
+    const wrongEnds = {
+      items,
+      entering: { id: "a", end: "front" },
+      leaving: { id: "z", value: 2, end: "back", label: "x" },
+    };
+    const problems = problemsOf(lessonWith(step(wrongEnds))).join();
+    expect(problems).toContain("only adds at the back");
+    expect(problems).toContain("only removes and peeks at the front");
+    expect(problemsOf(lessonWith(step({ ...wrongEnds, variant: "deque" })))).toEqual([]);
+  });
+
+  it("rejects duplicate ids across the line and outside it, and stray marks", () => {
+    const problems = problemsOf(
+      lessonWith(step({ items, waiting: { id: "a", value: 9, end: "back", label: "offer(9)" }, marks: { q: "focus" } })),
+    ).join();
+    expect(problems).toContain('Duplicate item id "a"');
+    expect(problems).toContain('unknown item "q"');
+  });
+
+  it("rejects an entering item that is not at its end, and peeking an empty queue", () => {
+    expect(problemsOf(lessonWith(step({ items, entering: { id: "a", end: "back" } }))).join()).toContain(
+      "entering item must be the one at the back",
+    );
+    expect(problemsOf(lessonWith(step({ items: [], peek: { end: "front", label: "peek()" } }))).join()).toContain(
+      "cannot be empty",
+    );
+  });
+
+  it("rejects lines too long to show", () => {
+    const long = Array.from({ length: 8 }, (_, i) => ({ id: `i${i}`, value: i }));
+    expect(problemsOf(lessonWith(step({ items: long })))).not.toEqual([]);
+  });
+});
+
+describe("compare visual validation", () => {
+  const pane = (id: string, visual: Record<string, unknown>) => ({ id, label: id, visual });
+  const step = (panes: unknown[]): LessonStepInput =>
+    ({ id: "s", mode: "show", title: "Compare", visual: { kind: "compare", panes } }) as LessonStepInput;
+
+  it("accepts a stack beside a queue", () => {
+    expect(
+      problemsOf(
+        lessonWith(
+          step([
+            pane("stack", { kind: "stack", items: [{ id: "a", value: 4 }] }),
+            pane("queue", { kind: "queue", items: [{ id: "a", value: 4 }] }),
+          ]),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("validates each pane with its own schema and needs exactly two unique panes", () => {
+    const badQueue = pane("queue", { kind: "queue", items: [], peek: { end: "front", label: "x" } });
+    expect(problemsOf(lessonWith(step([pane("stack", { kind: "stack", items: [] }), badQueue])))).not.toEqual([]);
+    const stack = pane("s", { kind: "stack", items: [] });
+    expect(problemsOf(lessonWith(step([stack, stack]))).join()).toContain("Duplicate pane id");
+    expect(problemsOf(lessonWith(step([stack])))).not.toEqual([]);
+    expect(problemsOf(lessonWith(step([stack, pane("t", { kind: "tree", root: null, nodes: [] })])))).not.toEqual([]);
+  });
+});

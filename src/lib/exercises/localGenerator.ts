@@ -18,6 +18,16 @@ import {
   stackValues,
   type StackOperation,
 } from "@/lib/domain/stack";
+import {
+  OPERATION_SEMANTICS,
+  queueFromValues,
+  queueValues,
+  runOperations as runQueue,
+  simplestDiscipline,
+  type DequeOperation,
+  type Discipline,
+  type OperationType,
+} from "@/lib/domain/queue";
 import { EXERCISE_SKILLS, type Difficulty, type ExerciseKindId } from "@/lib/learning/schema";
 import {
   arrayInsertionKind,
@@ -50,6 +60,17 @@ import {
   type StackAsk,
   type StackCandidate,
 } from "./kinds/stackOperations";
+import {
+  DEQUE_ASKS,
+  dequeOperationsKind,
+  MAX_QUEUE_SIZE,
+  QUEUE_ASKS,
+  queueOperationsKind,
+  type DequeAsk,
+  type DequeCandidate,
+  type QueueAsk,
+  type QueueCandidate,
+} from "./kinds/queueOperations";
 import { distinctInts, randomInt, shuffle, type Random } from "./random";
 import type { ExerciseGenerator, ExerciseRequest } from "./types";
 
@@ -472,6 +493,164 @@ function backtrackCandidate(difficulty: Difficulty, random: Random, skills?: str
   throw new Error(`Could not draw a valid ${difficulty} backtracking exercise.`);
 }
 
+// ---------------------------------------------------------------------------
+// Queues and deques
+
+type LineProfile<A extends string> = {
+  initial: [number, number];
+  operations: [number, number];
+  asks: A[];
+  /** How many values arrive in an ordering (recognition) question. */
+  arrivals: [number, number];
+};
+
+const queueProfiles: Record<Difficulty, LineProfile<QueueAsk>> = {
+  // One operation on a short line, then predict.
+  intro: { initial: [2, 4], operations: [1, 1], asks: ["dequeued", "peek", "front", "back"], arrivals: [3, 3] },
+  standard: { initial: [1, 4], operations: [2, 4], asks: [...QUEUE_ASKS], arrivals: [3, 4] },
+  // Longer sequences, possibly from empty; typed answers.
+  challenge: {
+    initial: [0, 3],
+    operations: [4, 6],
+    asks: ["final", "dequeued", "front", "back", "stack-or-queue"],
+    arrivals: [4, 5],
+  },
+};
+
+const dequeProfiles: Record<Difficulty, LineProfile<DequeAsk>> = {
+  intro: { initial: [2, 3], operations: [1, 2], asks: ["after-add", "removed", "end-operation"], arrivals: [3, 4] },
+  standard: { initial: [1, 4], operations: [2, 4], asks: [...DEQUE_ASKS], arrivals: [4, 4] },
+  challenge: {
+    initial: [0, 3],
+    operations: [3, 5],
+    asks: ["final", "removed", "after-add", "queue-or-deque"],
+    arrivals: [4, 5],
+  },
+};
+
+const pick = <T>(random: Random, items: readonly T[]): T => items[randomInt(random, 0, items.length - 1)];
+
+/**
+ * Draws a short operation sequence that never touches an empty line and
+ * stays within the visual's size, steering the last operation toward the
+ * question being asked.
+ */
+function drawLine(
+  random: Random,
+  profile: LineProfile<string>,
+  ask: string,
+  types: { add: OperationType[]; remove: OperationType[]; examine: OperationType[] },
+) {
+  const single = ask === "operation" || ask === "end-operation";
+  const length = single ? Math.max(2, randomInt(random, ...profile.initial)) : randomInt(random, ...profile.initial);
+  const count = single ? 1 : randomInt(random, ...profile.operations);
+  const values = distinctInts(random, length + count, 1, 30);
+  const initial = values.slice(0, length);
+  let fresh = values.slice(length);
+
+  const operations: DequeOperation<number>[] = [];
+  let size = length;
+  let removed = false;
+  for (let i = 0; i < count; i++) {
+    const last = i === count - 1;
+    let pool: OperationType[] = [];
+    if (size < MAX_QUEUE_SIZE) pool.push(...types.add);
+    if (size > 0 && ask !== "after-add") pool.push(...types.remove, ...types.remove);
+    if (size > 0 && !single && ask !== "after-add") pool.push(...types.examine);
+    if (last && ask === "peek" && size > 0) pool = ["peek"];
+    if (last && (ask === "dequeued" || ask === "removed") && !removed && size > 0) pool = types.remove;
+    // An add-only sequence can fill the line: stop there.
+    if (pool.length === 0) break;
+    const type = pick(random, pool);
+    if (OPERATION_SEMANTICS[type].action === "add") {
+      operations.push({ type, value: fresh[0] } as DequeOperation<number>);
+      fresh = fresh.slice(1);
+      size++;
+    } else {
+      operations.push({ type } as DequeOperation<number>);
+      if (OPERATION_SEMANTICS[type].action === "remove") {
+        size--;
+        removed = true;
+      }
+    }
+  }
+  // Like a model would, the generator states the outcome it expects.
+  const run = runQueue(queueFromValues(initial), operations);
+  return {
+    initial,
+    operations,
+    expected: { final: queueValues(run.final), removed: run.removed, examined: run.examined },
+  };
+}
+
+/** Narrows a drawn sequence to one kind's operations (which drawLine only ever draws from). */
+const lineOf = <C extends QueueCandidate | DequeCandidate>(line: ReturnType<typeof drawLine>) =>
+  line as typeof line & { operations: Extract<C, { operations: unknown }>["operations"] };
+
+/** An arrival order and a required order whose simplest fit is one of `structures`. */
+function drawOrdering(random: Random, profile: LineProfile<string>, structures: Discipline[]) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const arrivals = distinctInts(random, randomInt(random, ...profile.arrivals), 1, 30);
+    const structure = pick(random, structures);
+    let required = structure === "queue" ? arrivals : [...arrivals].reverse();
+    if (structure === "deque") {
+      let waiting = [...arrivals];
+      required = arrivals.map(() => {
+        const fromFront = random() < 0.5;
+        const value = fromFront ? waiting[0] : waiting[waiting.length - 1];
+        waiting = fromFront ? waiting.slice(1) : waiting.slice(0, -1);
+        return value;
+      });
+    }
+    if (simplestDiscipline(arrivals, required) === structure) {
+      return { arrivals, required, expected: { structure } };
+    }
+  }
+  throw new Error("Could not draw an ordering question.");
+}
+
+function queueCandidate(difficulty: Difficulty, random: Random, skills?: string[]): QueueCandidate {
+  const profile = queueProfiles[difficulty];
+  const asks = allowedAsks(profile.asks, QUEUE_ASKS, skills);
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const ask = pick(random, asks);
+    const header = { kind: "queue-operations", concept: "queues.operations", difficulty } as const;
+    const candidate: QueueCandidate =
+      ask === "stack-or-queue"
+        ? { ...header, ask, ...drawOrdering(random, profile, ["queue", "stack"]) }
+        : { ...header, ask, ...lineOf<QueueCandidate>(drawLine(random, profile, ask, { add: ["offer"], remove: ["poll"], examine: ["peek"] })) };
+    // "What is at the front/back?" is only a question if something moved that end.
+    const types = "operations" in candidate ? candidate.operations.map((op) => op.type) : [];
+    if (ask === "front" && !types.includes("poll")) continue;
+    if (ask === "back" && !types.includes("offer")) continue;
+    // Keep only sequences that support the question; the pipeline re-verifies anyway.
+    if (queueOperationsKind.verify(candidate).ok) return candidate;
+  }
+  throw new Error(`Could not draw a valid ${difficulty} queue exercise.`);
+}
+
+function dequeCandidate(difficulty: Difficulty, random: Random, skills?: string[]): DequeCandidate {
+  const profile = dequeProfiles[difficulty];
+  const asks = allowedAsks(profile.asks, DEQUE_ASKS, skills);
+  const types = {
+    add: ["addFirst", "addLast"] as OperationType[],
+    remove: ["pollFirst", "pollLast"] as OperationType[],
+    examine: ["peekFirst", "peekLast"] as OperationType[],
+  };
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const ask = pick(random, asks);
+    const header = { kind: "deque-operations", concept: "deques.operations", difficulty } as const;
+    const candidate: DequeCandidate =
+      ask === "queue-or-deque"
+        ? { ...header, ask, ...drawOrdering(random, profile, ["deque", "deque", "queue", "stack"]) }
+        : { ...header, ask, ...lineOf<DequeCandidate>(drawLine(random, profile, ask, types)) };
+    const actions = "operations" in candidate ? candidate.operations.map((op) => OPERATION_SEMANTICS[op.type].action) : [];
+    if (ask === "final" && actions.every((action) => action === "examine")) continue;
+    if (dequeOperationsKind.verify(candidate).ok) return candidate;
+  }
+  throw new Error(`Could not draw a valid ${difficulty} deque exercise.`);
+}
+
 /** Each factory returns a candidate plus the fingerprint used to avoid repeats. */
 type LocalFactory = (
   difficulty: Difficulty,
@@ -503,6 +682,14 @@ const factories: Record<ExerciseKindId, LocalFactory> = {
   backtracking: (difficulty, random, skills) => {
     const candidate = backtrackCandidate(difficulty, random, skills);
     return { candidate, fingerprint: backtrackingKind.fingerprint(candidate) };
+  },
+  "queue-operations": (difficulty, random, skills) => {
+    const candidate = queueCandidate(difficulty, random, skills);
+    return { candidate, fingerprint: queueOperationsKind.fingerprint(candidate) };
+  },
+  "deque-operations": (difficulty, random, skills) => {
+    const candidate = dequeCandidate(difficulty, random, skills);
+    return { candidate, fingerprint: dequeOperationsKind.fingerprint(candidate) };
   },
 };
 

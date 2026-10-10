@@ -21,6 +21,8 @@ export const EXERCISE_KINDS = [
   "recursion-trace",
   "tree-dfs",
   "backtracking",
+  "queue-operations",
+  "deque-operations",
 ] as const;
 export const DIFFICULTIES = ["intro", "standard", "challenge"] as const;
 
@@ -64,6 +66,8 @@ export const EXERCISE_SKILLS = {
     "snapshot-line",
     "no-undo-bug",
   ],
+  "queue-operations": ["dequeued", "peek", "front", "back", "final", "operation", "stack-or-queue"],
+  "deque-operations": ["after-add", "removed", "final", "end-operation", "queue-or-deque"],
 } as const satisfies Record<(typeof EXERCISE_KINDS)[number], readonly string[]>;
 
 export const exerciseKindSchema = z.enum(EXERCISE_KINDS);
@@ -408,12 +412,110 @@ export const backtrackVisualSchema = z
     for (const id of duplicates((visual.results ?? []).map((r) => r.id))) issue(["results"], `Duplicate result id "${id}".`);
   });
 
+export const QUEUE_ENDS = ["front", "back"] as const;
+/** Most values a queue visual holds, so a row of them fits a phone screen. */
+export const MAX_QUEUE_ITEMS = 7;
+
+const endSchema = z.enum(QUEUE_ENDS);
+const queueOutsideSchema = z.object({
+  id: idSchema,
+  value: stackValueSchema,
+  end: endSchema,
+  /** e.g. "offer(9)" or "poll() → 4". */
+  label: z.string().trim().min(1).max(24),
+});
+
+/**
+ * A queue or deque, front → back (front on the left). `waiting` is a value
+ * just outside an end, about to be added; `leaving` one that was just
+ * removed. Both keep their IDs, so between states a value visibly travels
+ * in through one end or out through the other, while waiting values keep
+ * theirs. A plain queue only adds at the back and removes at the front.
+ */
+export const queueVisualSchema = z
+  .object({
+    kind: z.literal("queue"),
+    /** "queue": in at the back, out at the front. "deque": both ends work. */
+    variant: z.enum(["queue", "deque"]).default("queue"),
+    items: z.array(z.object({ id: idSchema, value: stackValueSchema })).max(MAX_QUEUE_ITEMS),
+    marks: z.record(idSchema, z.enum(VISUAL_MARKS)).optional(),
+    /** Just added through this end: animates in from outside it. */
+    entering: z.object({ id: idSchema, end: endSchema }).optional(),
+    leaving: queueOutsideSchema.optional(),
+    waiting: queueOutsideSchema.optional(),
+    /** Reading an end without removing anything, e.g. "peek() → 4". */
+    peek: z.object({ end: endSchema, label: z.string().trim().min(1).max(24) }).optional(),
+    /** Hide the front/back labels, before the terms have been introduced. */
+    hideEnds: z.boolean().optional(),
+    caption: shortText.optional(),
+  })
+  .superRefine((visual, ctx) => {
+    const issue = (path: (string | number)[], message: string) => ctx.addIssue({ code: "custom", path, message });
+    const itemIds = visual.items.map((item) => item.id);
+    const ids = [
+      ...itemIds,
+      ...(visual.leaving ? [visual.leaving.id] : []),
+      ...(visual.waiting ? [visual.waiting.id] : []),
+    ];
+    for (const id of duplicates(ids)) issue(["items"], `Duplicate item id "${id}".`);
+    for (const id of Object.keys(visual.marks ?? {})) {
+      if (!ids.includes(id)) issue(["marks", id], `Mark refers to unknown item "${id}".`);
+    }
+    if (visual.entering) {
+      const { id, end } = visual.entering;
+      const atEnd = end === "front" ? itemIds[0] : itemIds[itemIds.length - 1];
+      if (atEnd !== id) issue(["entering"], `The entering item must be the one at the ${end}.`);
+    }
+    if (visual.peek && visual.items.length === 0) {
+      issue(["peek"], "peek highlights an end, so the queue cannot be empty.");
+    }
+    if (visual.leaving && visual.waiting && visual.leaving.end === visual.waiting.end) {
+      issue(["waiting"], "A waiting and a leaving value cannot share one end.");
+    }
+    if (visual.variant === "queue") {
+      const wrong = (end: string | undefined, allowed: string) => end !== undefined && end !== allowed;
+      if (wrong(visual.entering?.end, "back") || wrong(visual.waiting?.end, "back")) {
+        issue(["variant"], "A queue only adds at the back; use the deque variant for the front.");
+      }
+      if (wrong(visual.leaving?.end, "front") || wrong(visual.peek?.end, "front")) {
+        issue(["variant"], "A queue only removes and peeks at the front; use the deque variant for the back.");
+      }
+    }
+  });
+
+/**
+ * Two structures side by side, e.g. the same arrivals in a stack and a queue,
+ * so a behavioural difference is visible at a glance. Each pane is an ordinary
+ * stack or queue visual, validated by its own schema.
+ */
+export const compareVisualSchema = z
+  .object({
+    kind: z.literal("compare"),
+    panes: z
+      .array(
+        z.object({
+          id: idSchema,
+          label: z.string().trim().min(1).max(40),
+          visual: z.discriminatedUnion("kind", [stackVisualSchema, queueVisualSchema]),
+        }),
+      )
+      .length(2),
+    caption: shortText.optional(),
+  })
+  .superRefine((visual, ctx) => {
+    for (const id of duplicates(visual.panes.map((pane) => pane.id))) {
+      ctx.addIssue({ code: "custom", path: ["panes"], message: `Duplicate pane id "${id}".` });
+    }
+  });
+
 export const visualStateSchema = z.discriminatedUnion("kind", [
   arrayVisualSchema,
   stackVisualSchema,
   callStackVisualSchema,
   treeVisualSchema,
   backtrackVisualSchema,
+  queueVisualSchema,
+  compareVisualSchema,
 ]);
 
 // ---------------------------------------------------------------------------
@@ -666,6 +768,9 @@ export type StackVisual = z.infer<typeof stackVisualSchema>;
 export type CallStackVisual = z.infer<typeof callStackVisualSchema>;
 export type TreeVisual = z.infer<typeof treeVisualSchema>;
 export type BacktrackVisual = z.infer<typeof backtrackVisualSchema>;
+export type QueueVisual = z.infer<typeof queueVisualSchema>;
+export type QueueVisualInput = z.input<typeof queueVisualSchema>;
+export type CompareVisual = z.infer<typeof compareVisualSchema>;
 export type VisualState = z.infer<typeof visualStateSchema>;
 export type CodeView = z.infer<typeof codeViewSchema>;
 export type ChoiceQuestion = z.infer<typeof choiceQuestionSchema>;

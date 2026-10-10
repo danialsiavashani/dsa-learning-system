@@ -165,9 +165,10 @@ function describeStack(values: readonly number[]): string {
 // ---------------------------------------------------------------------------
 // Answer options, derived from the truth
 
-type Draft = { value: number; feedback?: string };
+export type Draft = { value: number; feedback?: string };
 
-function choice(
+/** A choice question whose options are derived values, in a seeded shuffle. */
+export function choice(
   prompt: string,
   correct: number,
   wrong: Draft[],

@@ -3,6 +3,7 @@ import { describeZodError } from "@/lib/learning/validate";
 import { arrayInsertionKind } from "./kinds/arrayInsertion";
 import { arrayRemovalKind } from "./kinds/arrayRemoval";
 import { backtrackingKind } from "./kinds/backtracking";
+import { dequeOperationsKind, queueOperationsKind } from "./kinds/queueOperations";
 import { recursionTraceKind } from "./kinds/recursionTrace";
 import { stackOperationsKind } from "./kinds/stackOperations";
 import { treeDfsKind } from "./kinds/treeDfs";
@@ -43,4 +44,6 @@ export const exerciseKinds: Record<ExerciseKindId, ExerciseKind> = {
   "recursion-trace": erase(recursionTraceKind),
   "tree-dfs": erase(treeDfsKind),
   backtracking: erase(backtrackingKind),
+  "queue-operations": erase(queueOperationsKind),
+  "deque-operations": erase(dequeOperationsKind),
 };
