@@ -1,8 +1,26 @@
 @import "tailwindcss";
 
+@theme {
+  --color-canvas: #eaf0f6;
+  --color-panel: #f9fbfd;
+  --color-line: #c9d4e2;
+  --color-ink: #18263a;
+  --color-muted: #5b6b80;
+  --color-accent: #2b6ce0;
+  --color-accent-soft: #e3ecfc;
+  --color-moved: #b7791f;
+  --color-moved-soft: #fbf1dd;
+  --color-fresh: #2f855a;
+  --color-fresh-soft: #e3f2e9;
+  --color-miss: #b4533a;
+
+  --font-sans: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
 :root {
-  --background: #eaf0f6;
-  --foreground: #18263a;
+  --background: var(--color-canvas);
+  --foreground: var(--color-ink);
 }
 
 * {
@@ -17,5 +35,43 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* ---------------------------------------------------------------------------
+ * Visualizer motion. Objects keep their identity between states, so CSS
+ * transitions on position carry the meaning of the change.
+ */
+
+.viz-motion {
+  transition-property: left, top, scale, opacity, background-color,
+    border-color, color;
+  transition-duration: 550ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Used by Replay to snap to the "before" state without animating. */
+.viz-instant,
+.viz-instant .viz-motion {
+  transition: none !important;
+  animation: none !important;
+}
+
+@keyframes viz-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-0.75rem);
+  }
+}
+
+.viz-enter {
+  animation: viz-enter 450ms cubic-bezier(0.4, 0, 0.2, 1) 250ms backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viz-motion,
+  .viz-enter {
+    transition-duration: 1ms !important;
+    animation: none !important;
+  }
 }
